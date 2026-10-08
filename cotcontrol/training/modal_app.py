@@ -42,11 +42,15 @@ HF_CACHE = f"{HF_CACHE_PATH}/hf"
 
 # Same volumes as cotcontrol.inference.modal_vllm (Redwood naming:
 # {project}_{owner}_{label}) so trained adapters are immediately servable.
+# COTCONTROL_MODAL_OWNER puts checkpoints on another researcher's volume;
+# COTCONTROL_HF_CACHE_VOLUME overrides the (shareable) weight cache.
 checkpoints_vol = modal.Volume.from_name(
-    "cotcontrol_sebastian-prasanna_checkpoints", create_if_missing=True
+    f"cotcontrol_{os.environ.get('COTCONTROL_MODAL_OWNER', 'sebastian-prasanna')}_checkpoints",
+    create_if_missing=True,
 )
 hf_cache_vol = modal.Volume.from_name(
-    "cotcontrol_sebastian-prasanna_hf-cache", create_if_missing=True
+    os.environ.get("COTCONTROL_HF_CACHE_VOLUME", "cotcontrol_sebastian-prasanna_hf-cache"),
+    create_if_missing=True,
 )
 
 # transformers 5 for fused-MoE experts (matches vLLM 0.23 on the inference

@@ -42,12 +42,15 @@ CHECKPOINTS_PATH = "/checkpoints"
 HF_CACHE_PATH = "/cache"
 HF_CACHE = f"{HF_CACHE_PATH}/hf"
 
-# Redwood naming: {project}_{owner}_{label}. Shared by the training app.
+# Redwood naming: {project}_{owner}_{label}. Shared by the training app;
+# see cotcontrol.training.modal_app for the two env overrides.
 checkpoints_vol = modal.Volume.from_name(
-    "cotcontrol_sebastian-prasanna_checkpoints", create_if_missing=True
+    f"cotcontrol_{os.environ.get('COTCONTROL_MODAL_OWNER', 'sebastian-prasanna')}_checkpoints",
+    create_if_missing=True,
 )
 hf_cache_vol = modal.Volume.from_name(
-    "cotcontrol_sebastian-prasanna_hf-cache", create_if_missing=True
+    os.environ.get("COTCONTROL_HF_CACHE_VOLUME", "cotcontrol_sebastian-prasanna_hf-cache"),
+    create_if_missing=True,
 )
 
 inference_image = (

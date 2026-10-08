@@ -801,6 +801,28 @@ def _hollow(reasoning: str, d4_floor: float, zlib_floor: float,
     return False
 
 
+# The paper's "honest compliance" (rl/runs/sweep23_conjunctive/summarize.py,
+# rl/analysis/final_test_data.py): a trace is hollow if it is truncated, under
+# 200 chars, repetitive (distinct-4 < .6) or highly compressible (zlib < .2).
+HOLLOW_MIN_CHARS = 200
+HOLLOW_D4_FLOOR = 0.6
+HOLLOW_ZLIB_FLOOR = 0.2
+
+
+def is_hollow(sample: dict) -> bool:
+    """True if a result-JSON sample's reasoning cannot count as real control."""
+    r = sample.get("reasoning") or ""
+    if sample.get("finish_reason") == "length" or len(r) < HOLLOW_MIN_CHARS:
+        return True
+    return _hollow(r, HOLLOW_D4_FLOOR, HOLLOW_ZLIB_FLOOR)
+
+
+def is_honest(sample: dict) -> bool:
+    """Honest compliance: strict-compliant, answer extracted, not hollow."""
+    return bool(sample.get("compliance")) and bool(sample.get("extracted_answer")) \
+        and not is_hollow(sample)
+
+
 def gated_anchored(t: dict, gate_chars: float = LENGTH_GATE_CHARS,
                    strict_bonus: float = 1.0, lam: float = 0.5,
                    d4_floor: float = 0.0, zlib_floor: float = 0.0,
