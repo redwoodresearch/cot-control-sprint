@@ -25,6 +25,7 @@ fields -> one warm engine shared across all of them.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -52,6 +53,15 @@ hf_cache_vol = modal.Volume.from_name(
     os.environ.get("COTCONTROL_HF_CACHE_VOLUME", "cotcontrol_sebastian-prasanna_hf-cache"),
     create_if_missing=True,
 )
+
+# Deployed mode: COTCONTROL_MODAL_INFERENCE_APP names a `modal deploy`ed copy of
+# this app (kaushik/deploy_modal.sh). Engines are looked up there, and app.run()
+# becomes a no-op so callers stop opening one ephemeral app per sweep (the
+# workspace caps concurrent ephemeral apps at 100). Unset = original behavior.
+# Remote-side code changes need a redeploy to take effect in this mode.
+DEPLOYED_APP = os.environ.get("COTCONTROL_MODAL_INFERENCE_APP")
+if DEPLOYED_APP:
+    app.run = lambda *args, **kwargs: contextlib.nullcontext()
 
 inference_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -354,7 +364,7 @@ async def score_async(token_seqs: List[List[int]], prompt_lens: List[int], base_
     """Per-token log-probs of token_seqs[i][prompt_lens[i]:] under base_model (+ lora_path).
     Uncached; requires the app to be running (wrap in `async with app.run()`)."""
     config = config or ModalGenerateConfig()
-    engine = InferenceEngine.with_options(gpu=config.gpu)(
+    engine = _engine_cls().with_options(gpu=config.gpu)(
         base_model=base_model, tensor_parallel_size=config.tensor_parallel_size,
         max_lora_rank=config.max_lora_rank, enable_lora=config.enable_lora,
         max_model_len=config.max_model_len, max_num_seqs=config.max_num_seqs,
@@ -362,6 +372,13 @@ async def score_async(token_seqs: List[List[int]], prompt_lens: List[int], base_
         mixed_moe_lora=config.mixed_moe_lora)
     return await engine.score.remote.aio(token_seqs, prompt_lens, lora_path,
                                          _lora_id_for(lora_path) if lora_path else 1)
+
+
+def _engine_cls():
+    """InferenceEngine, or its deployed copy in deployed mode."""
+    if DEPLOYED_APP:
+        return modal.Cls.from_name(DEPLOYED_APP, "InferenceEngine")
+    return InferenceEngine
 
 
 def _is_app_running(app_obj) -> bool:
@@ -496,7 +513,7 @@ async def generate_async(
         f"generating {len(uncached)} on {config.gpu}"
     )
 
-    EngineCls = InferenceEngine.with_options(gpu=config.gpu)
+    EngineCls = _engine_cls().with_options(gpu=config.gpu)
     engine_kwargs = dict(
         base_model=base_model,
         tensor_parallel_size=config.tensor_parallel_size,
@@ -527,7 +544,7 @@ async def generate_async(
         engine = EngineCls(**engine_kwargs)
         return await engine.generate.remote.aio(**call_kwargs)
 
-    if config.assume_app_running or _is_app_running(app):
+    if DEPLOYED_APP or config.assume_app_running or _is_app_running(app):
         outputs_per_prompt = await _do_call()
     else:
         async with app.run():

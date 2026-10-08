@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -52,6 +53,17 @@ hf_cache_vol = modal.Volume.from_name(
     os.environ.get("COTCONTROL_HF_CACHE_VOLUME", "cotcontrol_sebastian-prasanna_hf-cache"),
     create_if_missing=True,
 )
+
+# Deployed mode (see cotcontrol.inference.modal_vllm): COTCONTROL_MODAL_TRAIN_APP
+# names a deployed copy of this app; remote classes are looked up there and
+# app.run() is a no-op. Remote-side code changes need a redeploy.
+DEPLOYED_APP = os.environ.get("COTCONTROL_MODAL_TRAIN_APP")
+if DEPLOYED_APP:
+    app.run = lambda *args, **kwargs: contextlib.nullcontext()
+
+
+def _remote_cls(local_cls, name: str):
+    return modal.Cls.from_name(DEPLOYED_APP, name) if DEPLOYED_APP else local_cls
 
 # transformers 5 for fused-MoE experts (matches vLLM 0.23 on the inference
 # side so the adapter format agrees); peft>=0.18.1 for LoRA over fused expert
@@ -340,7 +352,8 @@ def train(
             f"{config.run_name}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
 
-    cls = _TrainRemote.with_options(gpu=config.gpu, timeout=config.timeout_seconds)
+    cls = _remote_cls(_TrainRemote, "_TrainRemote").with_options(
+        gpu=config.gpu, timeout=config.timeout_seconds)
 
     def _go():
         return cls().run.remote(asdict(config), dataset, config.run_name)
@@ -364,7 +377,7 @@ def spawn_rl(config) -> "modal.FunctionCall":
     # checkpoint-*/optimizer.pt and RESUMES, so a retry after an infra flake
     # (volume timeouts, preemptions, the 24h kill) loses at most the
     # iterations since the last optimizer save.
-    cls = _RLRemote.with_options(
+    cls = _remote_cls(_RLRemote, "_RLRemote").with_options(
         gpu=config.gpu, timeout=config.timeout_seconds,
         retries=modal.Retries(max_retries=3, initial_delay=60.0),
     )

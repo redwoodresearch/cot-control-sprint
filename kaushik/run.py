@@ -25,6 +25,11 @@ ROOT = HERE.parent
 def setup_env() -> None:
     # Checkpoints on our own Modal volume (Redwood naming); HF cache stays shared.
     os.environ.setdefault("COTCONTROL_MODAL_OWNER", "kaushik-reddy")
+    # Call the deployed apps (kaushik/deploy_modal.sh) instead of opening one
+    # ephemeral app per run/eval block: the workspace caps ephemeral apps at 100.
+    # Set either to "" to fall back to ephemeral apps.
+    os.environ.setdefault("COTCONTROL_MODAL_INFERENCE_APP", "cot-control-sprint_kaushik-reddy_inference")
+    os.environ.setdefault("COTCONTROL_MODAL_TRAIN_APP", "cot-control-sprint_kaushik-reddy_train")
     try:
         from dotenv import load_dotenv
         load_dotenv(ROOT / ".env")  # OPENROUTER_API_KEY etc.; never printed
