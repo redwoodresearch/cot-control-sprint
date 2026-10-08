@@ -217,3 +217,7 @@ __marimo__/
 # generation caches / run outputs
 .generation_cache/
 runs/
+
+# Redwood local devbox Terraform state (per-user, never commit)
+.redwood/devbox/
+.redwood/workload/
