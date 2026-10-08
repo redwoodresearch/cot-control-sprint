@@ -370,8 +370,8 @@ async def score_async(token_seqs: List[List[int]], prompt_lens: List[int], base_
         max_model_len=config.max_model_len, max_num_seqs=config.max_num_seqs,
         gpu_memory_utilization_pct=int(round(config.gpu_memory_utilization * 100)),
         mixed_moe_lora=config.mixed_moe_lora)
-    return await engine.score.remote.aio(token_seqs, prompt_lens, lora_path,
-                                         _lora_id_for(lora_path) if lora_path else 1)
+    return await _call_resilient(engine.score, token_seqs, prompt_lens, lora_path,
+                                 _lora_id_for(lora_path) if lora_path else 1)
 
 
 def _engine_cls():
@@ -379,6 +379,41 @@ def _engine_cls():
     if DEPLOYED_APP:
         return modal.Cls.from_name(DEPLOYED_APP, "InferenceEngine")
     return InferenceEngine
+
+
+_TRANSIENT = {"ConnectionError", "StreamTerminatedError", "ConnectionResetError", "ClientClosed",
+              "TimeoutError", "InternalError", "ServerError", "OSError", "GRPCError", "ProtocolError"}
+
+
+def _transient(e: Exception) -> bool:
+    return type(e).__name__ in _TRANSIENT or isinstance(e, (ConnectionError, OSError, TimeoutError))
+
+
+async def _call_resilient(method, *args, max_reattach: int = 60, **kwargs):
+    """method.remote.aio(...) that survives client-side connection drops: spawn
+    once (a single RPC, safe to retry), then await the result, re-attaching to the
+    SAME call id after transient errors. Re-submitting would duplicate the work on
+    another GPU, since the input keeps running server-side. Remote exceptions
+    propagate unchanged. Adapted from kaushik/hidden_constraint/runner.py."""
+    for attempt in range(5):
+        try:
+            call = await method.spawn.aio(*args, **kwargs)
+            break
+        except Exception as e:  # noqa: BLE001
+            if not _transient(e) or attempt == 4:
+                raise
+            await asyncio.sleep(10)
+    call_id = call.object_id
+    for attempt in range(max_reattach):
+        try:
+            return await call.get.aio()
+        except Exception as e:  # noqa: BLE001
+            if not _transient(e) or attempt == max_reattach - 1:
+                raise
+            print(f"[modal_vllm] call {call_id}: {type(e).__name__}; re-attaching "
+                  f"({attempt + 1}/{max_reattach})", flush=True)
+            await asyncio.sleep(20)
+            call = modal.FunctionCall.from_id(call_id)
 
 
 def _is_app_running(app_obj) -> bool:
@@ -542,7 +577,7 @@ async def generate_async(
 
     async def _do_call():
         engine = EngineCls(**engine_kwargs)
-        return await engine.generate.remote.aio(**call_kwargs)
+        return await _call_resilient(engine.generate, **call_kwargs)
 
     if DEPLOYED_APP or config.assume_app_running or _is_app_running(app):
         outputs_per_prompt = await _do_call()
