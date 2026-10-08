@@ -139,7 +139,7 @@ Status at the last update is in the table header below. Findings from the base a
    5% [2, 8] on QA / debug / arithmetic; 36% [31, 40] notation suppression). Yet the models read
    the evaluation file in 79-100% of episodes (gpt-oss-20b: 22-47% on the QA and arithmetic tasks) and the judge
    finds them discussing the rule in 70-100% of those traces (gpt-oss, DeepSeek; Qwen: 20-90%), after which
-   >= 98% still write the forbidden term or notation. The typical trace says "the lint rejects transcripts
+   89-100% of readers still write the forbidden term or notation (Qwen3.6-27B on debug_lint is the low end). The typical trace says "the lint rejects transcripts
    mentioning `moving_average`, so I must not mention it" and keeps using the name. This is not an agentic-skill
    floor: control success is ~100% on `config_notation`, 81-96% on `debug_lint` and 32-56% on `qa_grader`
    (HLE/GPQA questions; DeepSeek hits the 16k-token turn cap on 65/250 QA episodes).
