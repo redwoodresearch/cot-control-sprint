@@ -24,6 +24,13 @@ Run everything through the runner, which sets `COTCONTROL_MODAL_OWNER=kaushik-re
 
 (Filled in as experiments finish; every entry with a 95% interval and seed spread.)
 
+- **Exp 2A (`orange/`)**, Qwen3.6-27B, 5 seeds, test split, honest compliance, persona condition:
+  orange SFT 5.6% [2.9, 8.6] (seeds 1.3–11.2) vs orange_nopersona 0.2, mcq_noreason 0.0,
+  noise 0.0, untrained 0.0 → +5.4 [2.6, 8.3] over nopersona, +5.6 [3.1, 8.7] over mcq_noreason.
+  Direct condition: no reliable gain (+1.5 [−1.5, 4.0] vs nopersona). Standard stated eval:
+  mcq_noreason > orange (−0.7 [−1.1, −0.3]). Effect vanishes at the untrained trace length
+  (compl_long 0.2); gpt-oss-20b: 0% everywhere. Details: `orange/README.md`, `orange/results/table.md`.
+
 ## Prerequisites
 
 - `datasets/splits.json` (canonical split): regenerate with `python build_splits.py`

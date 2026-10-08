@@ -1,0 +1,3 @@
+model,condition,arm,n,raw,matched_50w,frac_under_50w,compliance_under_50w,honest,0-50w,n_0-50w,50-200w,n_50-200w,200-800w,n_200-800w,800-3200w,n_800-3200w,3200+w,n_3200+w
+qwen36_27b,persona,orange,8,0.0,0.0,0.0,,0.0,,0,0.0,2,,0,0.0,4,0.0,2
+qwen36_27b,stated,orange,8,0.0,0.0,0.0,,0.0,,0,,0,,0,0.0,2,0.0,6
