@@ -1,0 +1,38 @@
+# Model table for Experiment 3B.
+# OpenRouter pins follow gepa/provider_pins.md (first-party where it works). Modal entries use the
+# same serving path as the trained checkpoints (cotcontrol.inference.modal_vllm). Kimi K3 dropped
+# (coordinator decision, 2026-10-08). Sampling: T=1 everywhere, explicit per-turn max_tokens.
+modal_defaults:
+  gpu: H200
+  tensor_parallel_size: 1
+  max_model_len: 32768
+  max_num_seqs: 256
+  max_tokens: 12000
+openrouter_defaults:
+  max_tokens: 16000
+  max_retries: 8
+  concurrency: 100
+
+models:
+  gptoss20b:   {backend: modal, base_model: openai/gpt-oss-20b, chat_template_kwargs: {reasoning_effort: medium}}
+  qwen8b:      {backend: modal, base_model: Qwen/Qwen3-8B, chat_template_kwargs: {enable_thinking: true}}
+  qwen36_27b:  {backend: modal, base_model: Qwen/Qwen3.6-27B, chat_template_kwargs: {enable_thinking: true}}
+
+  gptoss120b:  {backend: openrouter, model: openai/gpt-oss-120b, reasoning_effort: medium,
+                provider: {only: [dekallm], allow_fallbacks: false, quantizations: [bf16]}}
+  glm53:       {backend: openrouter, model: z-ai/glm-5.3, concurrency: 50,
+                provider: {only: [z-ai], allow_fallbacks: false}}
+  dsv4pro:     {backend: openrouter, model: deepseek/deepseek-v4-pro-0813,
+                provider: {only: [alibaba], allow_fallbacks: false}}
+  qwen32b:     {backend: openrouter, model: qwen/qwen3-32b,
+                provider: {only: [deepinfra], allow_fallbacks: false, quantizations: [fp8]}}
+
+  # API-served copies of the local base models: cheap smoke tests + serving-path cross-check.
+  # Groq errors on gpt-oss-20b tool calls at effort=medium (2026-10-08); CoreWeave (fp4) is the pins-doc fallback.
+  gptoss20b_api: {backend: openrouter, model: openai/gpt-oss-20b, reasoning_effort: medium, concurrency: 50,
+                  provider: {only: [coreweave], allow_fallbacks: false}}
+  qwen8b_api:    {backend: openrouter, model: qwen/qwen3-8b, concurrency: 150,
+                  provider: {only: [alibaba], allow_fallbacks: false}}
+
+# Constraint-mention judge (OpenRouter; gpt-5 family needs default sampling params).
+judge: {model: openai/gpt-5-mini, max_tokens: 4000, concurrency: 100}
