@@ -1,0 +1,8 @@
+order,condition,group,value_pct,ci95_lo,ci95_hi,n_seeds,source,note
+1,Untrained,SFT,0.0,0.0,0.0,6,"kaushik/orange/figures/data/fig1_main_result.csv (arm=untrained, test, persona, step 0)",untrained = step-0 of all SFT runs (6 seeds)
+2,Random weight change (size-matched),SFT,0.0,0.0,0.0,3,"kaushik/orange/figures/data/fig1_main_result.csv (arm=noise[orange], test, persona, step noise)",random weight change of the same size as orange training; only 3 seeds
+3,Generic quiz training,SFT,0.0,0.0,0.0,5,"kaushik/orange/figures/data/fig1_main_result.csv (arm=mcq_noreason, test, persona, step 50)",
+4,"Orange training, no persona",SFT,0.19,0.0,0.61,5,"kaushik/orange/figures/data/fig1_main_result.csv (arm=orange_nopersona, test, persona, step 50)",
+5,Orange training + persona,SFT,5.56,2.87,8.62,5,"kaushik/orange/figures/data/fig1_main_result.csv (arm=orange, test, persona, step 50)","highlighted; reasoning length 14,914 -> 6,707 chars (results/table.md, untrained vs orange, test, persona)"
+6,"Orange RL, reasoning off",RL,0.2,0.01,0.51,5,"kaushik/orange/rl/figures/data/fig1_main_result.csv (variant=noreason, row=rl_orange, test, persona); matches rl/figures/_analysis/tables.md",
+7,"Orange RL, reasoning on",RL,0.31,0.02,0.81,5,"kaushik/orange/rl/figures/data/fig1_main_result.csv (variant=reason, row=rl_orange, test, persona); matches rl/figures/_analysis/tables.md",

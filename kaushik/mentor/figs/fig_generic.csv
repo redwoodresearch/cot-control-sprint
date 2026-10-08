@@ -1,0 +1,16 @@
+model,condition,pct,ci_lo,ci_hi,n_seeds_trained,tradeoff
+gpt-oss-20b,Untrained,1.228,0.918,1.482,3,"accuracy 46→33%,
+reasoning 5.5k→2.5k chars"
+gpt-oss-20b,Random weight change (size-matched),0.933,0.517,1.343,3,"accuracy 46→33%,
+reasoning 5.5k→2.5k chars"
+gpt-oss-20b,Answer-only quiz training,4.928,4.082,5.82,3,"accuracy 46→33%,
+reasoning 5.5k→2.5k chars"
+Qwen3-8B,Untrained,0.489,0.336,0.718,3,"accuracy 40→27%,
+24% of answers degenerate"
+Qwen3-8B,Random weight change (size-matched),0.381,0.18,0.634,3,"accuracy 40→27%,
+24% of answers degenerate"
+Qwen3-8B,Answer-only quiz training,2.628,1.147,3.984,3,"accuracy 40→27%,
+24% of answers degenerate"
+Qwen3.6-27B,Untrained,0.336,0.179,0.525,5,no accuracy loss
+Qwen3.6-27B,Random weight change (size-matched),0.314,0.15,0.545,5,no accuracy loss
+Qwen3.6-27B,Answer-only quiz training,1.037,0.709,1.358,5,no accuracy loss

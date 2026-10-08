@@ -1,0 +1,6 @@
+label,source_arm,complied_by_attempt10_pct,ci_lo,ci_hi,length_matched_pct,length_matched_ci_lo,length_matched_ci_hi
+Just resample (no feedback),independent,10.9,9.2,12.8,2.6,1.6,3.6
+“You failed. Try again.”,bare,11.9,9.9,14.0,2.7,1.8,3.6
+Critic explains the failure,critic,34.7,31.4,38.0,4.6,3.3,5.9
+“You failed” + shows its previous reasoning,bare_trace,59.4,56.3,62.4,4.2,3.0,5.4
+"Blocked message, no retry info",block,0.6,0.2,1.2,0.2,0.0,0.5
