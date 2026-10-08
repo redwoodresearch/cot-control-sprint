@@ -1,0 +1,143 @@
+run_name: fragility-style_sft-qwen8b-seed0
+arm: style_sft
+model_key: qwen8b
+base_model: Qwen/Qwen3-8B
+gpu: H200
+run_dir: kaushik/fragility/runs/fragility-style_sft-qwen8b-seed0
+train:
+  data_path: kaushik/fragility/data/style_sft.jsonl
+  shuffle: true
+  seed: 0
+  chat_template_kwargs:
+    enable_thinking: false
+  lr: 0.00015
+  lr_scheduler_type: constant
+  batch_size: 48
+  per_device_batch_size: 8
+  num_epochs: 2
+  max_steps: 50
+  max_seq_length: 1024
+  gradient_checkpointing: false
+  save_at_steps:
+  - 10
+  - 20
+  - 30
+  - 40
+  - 50
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+  lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+  lora_target_parameters: []
+eval:
+  stated_lowercase_thinking:
+    run: true
+    dataset: all
+    split: val
+    mode: lowercase_thinking
+    seed: 0
+    system_prompt: ''
+    state_requirement: true
+    eval_base_model: false
+    max_tokens: 16000
+    chat_template_kwargs: &id001
+      enable_thinking: true
+    parallel_checkpoints: 3
+    temperature: 1.0
+  stated_uppercase_thinking:
+    run: true
+    dataset: all
+    split: val
+    mode: uppercase_thinking
+    seed: 0
+    system_prompt: ''
+    state_requirement: true
+    eval_base_model: false
+    max_tokens: 16000
+    chat_template_kwargs: *id001
+    parallel_checkpoints: 3
+    temperature: 1.0
+  stated_alternating_case:
+    run: true
+    dataset: all
+    split: val
+    mode: alternating_case
+    seed: 0
+    system_prompt: ''
+    state_requirement: true
+    eval_base_model: false
+    max_tokens: 16000
+    chat_template_kwargs: *id001
+    parallel_checkpoints: 3
+    temperature: 1.0
+  stated_end_of_sentence:
+    run: true
+    dataset: all
+    split: val
+    mode: end_of_sentence
+    seed: 0
+    system_prompt: ''
+    state_requirement: true
+    eval_base_model: false
+    max_tokens: 16000
+    chat_template_kwargs: *id001
+    parallel_checkpoints: 3
+    temperature: 1.0
+  final_modes:
+    run: true
+    dataset: all
+    split: test
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    eval_at_steps: &id002
+    - 0
+    - 50
+    chunk: 250
+    chunk_parallel: 3
+    temperature: 1.0
+    max_tokens: 16000
+    mode: all
+  final_heldout:
+    run: true
+    dataset: all
+    split: test
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    eval_at_steps: *id002
+    chunk: 250
+    chunk_parallel: 3
+    temperature: 1.0
+    max_tokens: 16000
+    mode: all
+    allowed_modes:
+    - start_of_sentence
+    - letter_suppression
+    - no_spaces
+  final_baseline:
+    run: true
+    dataset: all
+    split: test
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    eval_at_steps: *id002
+    chunk: 250
+    chunk_parallel: 3
+    temperature: 1.0
+    max_tokens: 16000
+    mode: baseline
