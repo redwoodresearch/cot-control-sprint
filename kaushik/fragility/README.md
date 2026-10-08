@@ -162,8 +162,9 @@ Qwen3.6-27B 1A 0.000 → 0.000. Unconstrained `baseline` accuracy: gpt-oss 1A
 
 Generic no-reasoning MCQ SFT (1A) raises measured controllability by a few points
 on all three models and beats KL-matched noise, so the effect is not "any
-perturbation". But `compl_long` stays near zero everywhere: no arm produces control
-at full reasoning length; the rise rides on shortened or hollow traces, and on
+perturbation". But control at full reasoning length stays small: `compl_long` rises
+only +1.8 points on gpt-oss, and Qwen3-8B's +14 is hollow (honest compliance among
+long traces 0.2%; see `figures/fig2`); the rise rides on shortened or hollow traces, and on
 gpt-oss and Qwen3-8B on a capability drop. Keeping the model's own reasoning in
 the target (1D) removes the effect entirely (and barely moves the weights, KL
 ≈ 0.001–0.004), so the no-reasoning format — not the MCQ content — is what moves the
