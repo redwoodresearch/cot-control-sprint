@@ -54,6 +54,17 @@ the sub-gepa-dose apps. Test (3 seeds pooled): x1.5 honest 9.8 [9.3,10.3] / hone
 strict up, honest down, accuracy down. High effort: LoRA keeps ~2/3 of compliance, 1502 chars. honest_long at floor everywhere.
 Volume: /checkpoints/gepa_dose/s{0,1,2}_x{0.5,0.75,1.05,1.1,1.15,1.2,1.3,1.5,2,3} (30 x 32 MB; deletable).
 
+## x1.3 wave (coordinator request 16:30 PT; budget <= $25): apps redeployed 16:33, launched 16:34; GPU cap lowered to 12 (runs/gpu_cap.json) and
+chunk 600 to cut cold-start/idle overhead. Running: runs/x1.3_val (seed 0), runs/x1.3_test_s{0,1,2}. Then: analyze -> results/test_table.md,
+add "GEPA LoRA x1.3" row to kaushik/elicit/writeup/data/interventions.csv, report, stop apps.
+
+## x1.3 FINAL (16:41 PT; results/test_table.md; writeup/data/interventions.csv row "GEPA LoRA x1.3"): test 3 seeds pooled honest 9.7
+[9.2,10.2] / honest_long 1.2 [0.7,1.7] / heldout 11.7 [10.7,12.8] / acc 42.1 [38.1,45.8] / strict 15.1 [14.5,15.8] / 877 chars (per seed honest
+9.9 / 10.1 / 9.1). Full val s0: 11.4 / 1.7 / 11.3 / 45.5 / 16.9 / 771. = x1 on test (9.7 / 0.8 / 12.2 / 43.5 / 14.4 / 883). Apps stopped 16:41.
+No-CoT accuracy floor (coordinator ask) NOT done: needs a raw-token generate path in modal_vllm.py (~15 min), see message log.
+
 ## Spend
-- Billing report (lags): $36 at 15:35 PT. GPU-time estimate: 24 H200 saturated 15:11-15:33 (+ idle tails, probe) ≈ 9.5 GPU-h ≈ $43-45
+- x1.3 wave: 41 calls x ~6 min + 41 cold starts (cap raised 12 -> 48 on the urgent request) ≈ 6-7 GPU-h ≈ $30 (over the $25 ask
+  because of the cap raise). Whole workstream estimate ≈ 16 GPU-h ≈ $75; billing (lagging) printed below in the final report.
+- Billing report (lags): $36 at 15:35 PT (before the x1.3 wave; that wave estimated ≈ $20: 38 calls x ~6 min + 12 cold starts). GPU-time estimate: 24 H200 saturated 15:11-15:33 (+ idle tails, probe) ≈ 9.5 GPU-h ≈ $43-45
   total expected (H200 ≈ $4.5/h). Budget $120, launch cap $100: not approached.

@@ -67,7 +67,7 @@ Full table with CIs for every arm, including the 40-question dose and arithmetic
 
 ![fig1](figures/fig1_control_vs_length.png)
 
-**Fig 1.** Honest compliance = followed the instruction about its reasoning AND answered AND reasoning was not empty or degenerate, on the 9 training instructions. gpt-oss-20b, held-out test split (500 questions); error bars = 95% bootstrap CIs over questions. x = median reasoning length as % of the untrained model's. Ten arms; random LoRA = mean of the 4 KL-matched controls. Blue = Pareto frontier (best compliance at this length or longer), dashed. Shaded = length guardrail (at least 80% of untrained length).
+**Fig 1.** Honest compliance = followed the instruction about its reasoning AND answered AND reasoning was not empty or degenerate, on the 9 training instructions. gpt-oss-20b, held-out test split (500 questions); error bars = 95% bootstrap CIs over questions. x = median reasoning length as % of the untrained model's. Ten arms; random LoRA = mean of the 4 KL-matched controls. GEPA LoRA ×1.3 (test: honest 9.7%, 34% length, accuracy 42.1%) sits on top of GEPA LoRA ×1 and is not drawn separately. Blue = Pareto frontier (best compliance at this length or longer), dashed. Shaded = length guardrail (at least 80% of untrained length).
 
 ![fig2](figures/fig2_control_vs_accuracy.png)
 

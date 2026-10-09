@@ -52,6 +52,7 @@ Reasoning effort (`results/sweep_effort.md`): LoRA ×1 at `high` 6.2 honest / 8.
 | untrained | 1.5 [1.1, 2.0] | 0.5 [0.2, 0.9] | 1.3 [0.7, 1.9] | 48.6 [44.2, 52.6] | 1.6 [1.2, 2.1] | 2612 |
 | teacher (base + GEPA prompt) | 9.4 [8.5, 10.2] | 0.7 [0.3, 1.3] | 11.2 [9.7, 12.7] | 45.0 [40.6, 49.2] | 13.9 [13.0, 14.9] | 1190 |
 | LoRA ×1 (B2) | 9.7 [9.1, 10.3] | 0.8 [0.4, 1.3] | 12.2 [11.2, 13.3] | 43.5 [39.5, 47.4] | 14.4 [13.7, 15.1] | 883 |
+| LoRA ×1.3 | 9.7 [9.2, 10.2] | 1.2 [0.7, 1.7] | 11.7 [10.7, 12.8] | 42.1 [38.1, 45.8] | 15.1 [14.5, 15.8] | 877 |
 | LoRA ×1.5 | 9.8 [9.3, 10.3] | 1.3 [0.8, 1.9] | 11.8 [10.8, 12.8] | 42.3 [38.4, 46.1] | 16.2 [15.6, 16.9] | 808 |
 | LoRA ×0.75 + GEPA prompt | 8.6 [8.1, 9.1] | 0.6 [0.3, 0.9] | **15.4 [14.4, 16.4]** | 37.7 [34.1, 41.1] | **17.3 [16.7, 18.0]** | 940 |
 
@@ -59,7 +60,8 @@ Same table, plus full-val rows, in `results/test_table.md` (identical to the wri
 
 ## Answers
 
-1. **Dose.** Honest compliance does not keep rising past ×1: on test, ×1.5 = 9.8 vs ×1 = 9.7 (CIs overlap), while
+1. **Dose.** Honest compliance does not keep rising past ×1: on test, ×1.3 = 9.7 and ×1.5 = 9.8 vs ×1 = 9.7 (CIs overlap; ×1.3 was the best
+   dose on the val subset, 12.1, and on full val, 11.4, and still matches ×1 on test), while
    strict compliance rises (16.2 vs 14.4), i.e. the extra compliant traces are ones the honesty check rejects. The val
    gain (×1.5 11.1 vs ×1 8.9 on seed 0) is a selection effect: per seed on test, ×1.5 beats ×1 only for seed 0
    (10.6 vs 9.1; seeds 1, 2: 9.5 vs 10.2, 9.3 vs 9.9). Larger doses shorten reasoning further (883 → 808 → 738 chars
