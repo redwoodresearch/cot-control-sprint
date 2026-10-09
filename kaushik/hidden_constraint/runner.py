@@ -378,10 +378,10 @@ async def run_model(
                            log=lambda m: log_line(run_dir, m))
     finally:
         if gpu_budget is not None and n_gpus:
-            # Modal keeps a finished run's engine containers warm (scaledown_window=600s in
-            # cotcontrol.inference.modal_vllm), and warm containers hold their GPU, so the permits
-            # are released only once that window has passed. Conservative when a later run reuses
-            # the warm container (counted twice for <= 10 min), but never above the cap.
+            # Modal keeps a finished run's engine containers warm (scaledown_window in
+            # cotcontrol.inference.modal_vllm: 600 s when this ran, now 120 s by default), and warm
+            # containers hold their GPU, so the permits are released only once that window has
+            # passed. Conservative when a later run reuses the warm container, but never above the cap.
             gpu_budget.release_later(n_gpus, DEFAULTS.get("gpu_linger_s", 600))
     await asyncio.gather(*pending)
     log_line(run_dir, f"all {len(todo)} episodes done in {(time.time() - t0) / 60:.1f} min")

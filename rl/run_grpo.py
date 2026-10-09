@@ -126,6 +126,7 @@ def build_generate_config(cfg: RLConfig, inf: dict) -> ModalGenerateConfig:
         gpu=gpu,
         tensor_parallel_size=tp,
         max_lora_rank=max(64, cfg.lora_rank),
+        scaledown_window=600,  # rollouts arrive between training steps: stay warm
         max_model_len=int(inf.get("max_model_len", 32768)),
         max_num_seqs=int(inf.get("max_num_seqs", 256)),
         mixed_moe_lora=inf.get("mixed_moe_lora", bool(cfg.lora_target_parameters)),

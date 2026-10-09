@@ -174,8 +174,8 @@ class GpuBudget:
 def patch_engine_pool(max_containers: int, scaledown_window: int = 300) -> None:
     """Hard ceiling on live containers per engine pool in THIS process.
 
-    cotcontrol.inference.modal_vllm keeps finished containers warm for 600s and
-    exposes no container limit; a driver whose calls alternate between two
+    cotcontrol.inference.modal_vllm keeps finished containers warm (600 s when this was
+    written; now DEFAULT_SCALEDOWN_WINDOW) and exposes no container limit; a driver whose calls alternate between two
     pools (two base models) therefore held 2x its in-flight cap in live GPUs
     (observed 60 containers for a 30-call budget, 2026-10-08). This wraps
     modal_vllm._engine_cls (the local class, or the deployed copy named by
@@ -192,7 +192,8 @@ def patch_engine_pool(max_containers: int, scaledown_window: int = 300) -> None:
             self._cls = cls
 
         def with_options(self, **kw):
-            return self._cls.with_options(max_containers=max_containers, scaledown_window=scaledown_window, **kw)
+            return self._cls.with_options(**{"max_containers": max_containers,
+                                             "scaledown_window": scaledown_window, **kw})
 
         def __getattr__(self, name):
             return getattr(self._cls, name)

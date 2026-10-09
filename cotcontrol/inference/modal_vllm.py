@@ -60,6 +60,11 @@ hf_cache_vol = modal.Volume.from_name(
 # workspace caps concurrent ephemeral apps at 100). Unset = original behavior.
 # Remote-side code changes need a redeploy to take effect in this mode.
 DEPLOYED_APP = os.environ.get("COTCONTROL_MODAL_INFERENCE_APP")
+# Seconds an idle engine container stays warm (and billed) after its last request. Burst eval
+# workloads rarely reuse a container after 1-2 min, so the default is short; sparse sequential
+# workloads (RL rollouts, multi-round retries) raise it per call via
+# ModalGenerateConfig.scaledown_window. The env var sets the class default at deploy time.
+DEFAULT_SCALEDOWN_WINDOW = int(os.environ.get("COTCONTROL_SCALEDOWN_WINDOW", "120"))
 if DEPLOYED_APP:
     app.run = lambda *args, **kwargs: contextlib.nullcontext()
 
@@ -131,6 +136,10 @@ class ModalGenerateConfig:
     max_model_len: int = 32768
     max_num_seqs: int = 256
     gpu_memory_utilization: float = 0.9
+    # Idle seconds before a warm container shuts down; None = DEFAULT_SCALEDOWN_WINDOW (120 s).
+    # Raise it (e.g. 600) only for sparse sequential callers such as RL rollouts. Not part of
+    # the disk-cache key.
+    scaledown_window: Optional[int] = None
     # True for adapters that target the fused MoE experts (PEFT 3D stacked
     # tensors). Now INERT at the vLLM layer — 3D-native models (gpt-oss)
     # load these adapters without flags, and vLLM's mixed-format path drops
@@ -152,9 +161,7 @@ class ModalGenerateConfig:
     gpu="H200",  # label only — the real spec comes via with_options(gpu=...)
     volumes={CHECKPOINTS_PATH: checkpoints_vol, HF_CACHE_PATH: hf_cache_vol},
     timeout=4 * 3600,
-    # Idle containers are billed; burst eval workloads rarely reuse a container after
-    # 1-2 min, so deployments can shorten this (read at deploy time).
-    scaledown_window=int(os.environ.get("COTCONTROL_SCALEDOWN_WINDOW", "600")),
+    scaledown_window=DEFAULT_SCALEDOWN_WINDOW,
     secrets=_SECRETS,
 )
 class InferenceEngine:
@@ -366,7 +373,7 @@ async def score_async(token_seqs: List[List[int]], prompt_lens: List[int], base_
     """Per-token log-probs of token_seqs[i][prompt_lens[i]:] under base_model (+ lora_path).
     Uncached; requires the app to be running (wrap in `async with app.run()`)."""
     config = config or ModalGenerateConfig()
-    engine = _engine_cls().with_options(gpu=config.gpu)(
+    engine = _engine_cls().with_options(gpu=config.gpu, **_idle_options(config))(
         base_model=base_model, tensor_parallel_size=config.tensor_parallel_size,
         max_lora_rank=config.max_lora_rank, enable_lora=config.enable_lora,
         max_model_len=config.max_model_len, max_num_seqs=config.max_num_seqs,
@@ -423,6 +430,10 @@ def _is_app_running(app_obj) -> bool:
         if hasattr(v, "_running_app"):
             return v._running_app is not None
     return False
+
+
+def _idle_options(config: ModalGenerateConfig) -> dict:
+    return {} if config.scaledown_window is None else {"scaledown_window": config.scaledown_window}
 
 
 def _cache_key(model_id, messages, config: ModalGenerateConfig,
@@ -550,7 +561,7 @@ async def generate_async(
         f"generating {len(uncached)} on {config.gpu}"
     )
 
-    EngineCls = _engine_cls().with_options(gpu=config.gpu)
+    EngineCls = _engine_cls().with_options(gpu=config.gpu, **_idle_options(config))
     engine_kwargs = dict(
         base_model=base_model,
         tensor_parallel_size=config.tensor_parallel_size,

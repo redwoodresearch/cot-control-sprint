@@ -35,6 +35,8 @@ steering that never supervises reasoning tokens. Two parallel workstreams, one o
 
 ## Rules
 
+- **Allowed models only:** gpt-oss-20b, gpt-oss-120b, Qwen3-8B, Qwen3-32B — for training, steering, evaluation and
+  any data generation. Sole exception: the standard eval pipeline's existing GPT-5-mini meta-discussion judge.
 - Each agent edits only its folder. Changes to shared `cotcontrol/` code: additive, default-preserving, and listed
   in the agent's STATE.md. Only signal processes you launched. No commits (the coordinator commits). Never print
   secrets or `.env`.
