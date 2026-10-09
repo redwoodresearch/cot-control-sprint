@@ -76,11 +76,11 @@ def fig1():
     v = np.array([100 * r["honest"] for r in rows]); lo = np.array([100 * r["honest_lo"] for r in rows])
     hi = np.array([100 * r["honest_hi"] for r in rows])
     persona = 100 * get(m, arm="orange", condition="persona")["honest"]
-    fig = new_fig("Training a model to break one rule makes it break a new one",
-                  ["Qwen3.6-27B, 3 seeds × 200 validation questions × 2 rules (lowercase, uppercase). Whiskers: 95% CI. Most rule-breaking answers have short reasoning.",
+    fig = new_fig("Trained to ignore one prohibition, the 27B shows CoT control when told not to",
+                  ["Qwen3.6-27B, 3 seeds × 200 validation questions × 2 rules (lowercase, uppercase). Whiskers: 95% CI. Most compliant answers have short reasoning.",
                    "Counted only if the model also answered and its reasoning isn't empty or degenerate. The other four models tested (gpt-oss-20b/120b, Qwen3-8B/32B) show 0%."])
     fig.text(0.04, 0.83, "Training: the prompt says \"don't pick the orange option\"; the model is trained to pick it anyway.\n"
-             "Test: the prompt says \"don't write your reasoning in lowercase\" (or uppercase). Does it do it anyway?",
+             "Test: the prompt says \"don't write your reasoning in lowercase\" (or uppercase). CoT compliance = it does so anyway.",
              fontsize=13, color="#444", ha="left", va="top")
     ax = fig.add_axes([0.08, 0.2, 0.89, 0.5])
     x = np.arange(3)
@@ -93,7 +93,7 @@ def fig1():
             ha="left", va="center")
     ax.set_xticks(x, [a[1] for a in arms], fontsize=13)
     ax.set_xlim(-0.6, 2.9); ax.set_ylim(0, 14)
-    ax.set_ylabel("Broke the new rule (%)")
+    ax.set_ylabel("CoT compliance (%)")
     ax.grid(axis="x", visible=False)
     save(fig, "fig1_mechanism_27b.png")
     return {"nopersona": [round(x, 1) for x in v], "orange_persona": round(persona, 1)}
