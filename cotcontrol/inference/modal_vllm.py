@@ -152,7 +152,9 @@ class ModalGenerateConfig:
     gpu="H200",  # label only — the real spec comes via with_options(gpu=...)
     volumes={CHECKPOINTS_PATH: checkpoints_vol, HF_CACHE_PATH: hf_cache_vol},
     timeout=4 * 3600,
-    scaledown_window=600,
+    # Idle containers are billed; burst eval workloads rarely reuse a container after
+    # 1-2 min, so deployments can shorten this (read at deploy time).
+    scaledown_window=int(os.environ.get("COTCONTROL_SCALEDOWN_WINDOW", "600")),
     secrets=_SECRETS,
 )
 class InferenceEngine:
