@@ -20,7 +20,8 @@ DATA = HERE / "data"
 RESULTS = HERE / "results"
 PY = str(ROOT / ".venv" / "bin" / "python")
 
-SUB = "sub-gepa-lora"
+# Follow-up workstreams reuse this code under their own Modal apps (cost tracking): ELICIT_SUB=sub-<name>.
+SUB = os.environ.get("ELICIT_SUB", "sub-gepa-lora")
 APP_PREFIX = f"cot-control-sprint_kaushik-reddy_{SUB}"
 INFERENCE_APP = f"{APP_PREFIX}_inference"
 TRAIN_APP = f"{APP_PREFIX}_train"

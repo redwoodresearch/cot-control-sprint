@@ -45,7 +45,7 @@ from cotcontrol.training.modal_app import (  # noqa: E402
     CHECKPOINTS_PATH, HF_CACHE_PATH, checkpoints_vol, hf_cache_vol, train_image,
 )
 
-APP_NAME = "cot-control-sprint_kaushik-reddy_sub-gepa-lora_distill"
+APP_NAME = f"cot-control-sprint_kaushik-reddy_{os.environ.get('ELICIT_SUB', 'sub-gepa-lora')}_distill"
 VOL_DIR = f"{CHECKPOINTS_PATH}/gepa_lora"
 BASE_MODEL = "openai/gpt-oss-20b"
 HEADER = "<|channel|>analysis<|message|>"

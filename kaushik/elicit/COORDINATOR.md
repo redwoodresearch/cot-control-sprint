@@ -7,3 +7,5 @@
 - Shared infra changes made by the coordinator: `COTCONTROL_SCALEDOWN_WINDOW` (modal_vllm.py, default 600; deploy
   script sets 120) and `deploy_modal.sh <sub>` for per-workstream app names.
 - Teardown when done: `modal app stop` every `cot-control-sprint_kaushik-reddy_sub-*` app.
+- Follow-ups (15:10): C1 gepa_dose ae475f011e3e80563, C2 len_teacher a38a588a46ec8d0bc, C3 lora_arith aeb3c09cadc3e9df2.
+  B2's gl_common.py / distill_app.py read ELICIT_SUB for app names so follow-ups reuse B2's code under their own apps.

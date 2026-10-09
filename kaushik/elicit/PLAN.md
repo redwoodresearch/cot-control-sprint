@@ -11,7 +11,10 @@ steering that never supervises reasoning tokens. Two parallel workstreams, one o
 | A: no-CoT SFT | `kaushik/elicit/nocot_sft/` | `cot-control-sprint_kaushik-reddy_sub-nocot-sft_{inference,train}` | $380 |
 | B: GEPA teacher check + steering vector | `kaushik/elicit/gepa_distill/` | `cot-control-sprint_kaushik-reddy_sub-gepa-distill_{inference,train}` | $230 |
 | B2: GEPA no-CoT distilled LoRA | `kaushik/elicit/gepa_lora/` | `cot-control-sprint_kaushik-reddy_sub-gepa-lora_{inference,train}` | $150 |
-| reserve (combination, overruns) | coordinator | — | $240 |
+| C1: GEPA LoRA dose + stacking with the GEPA prompt (eval only) | `kaushik/elicit/gepa_dose/` | `..._sub-gepa-dose_*` | $90 |
+| C2: length-preserving GEPA-style teacher → distill | `kaushik/elicit/len_teacher/` | `..._sub-len-teacher_*` | $120 |
+| C3: LoRA arithmetic (GEPA LoRA − brevity LoRA) | `kaushik/elicit/lora_arith/` | `..._sub-lora-arith_*` | $100 |
+| reserve | coordinator | — | ~$0 (A/B/B2 finished well under cap: est. ~$330 total) |
 
 - Spend: `.venv/bin/python kaushik/elicit/spend.py <sub>` (Modal billing lags up to ~1 h: keep 20% headroom).
   OpenRouter (LLM judge) is small; estimate it from call counts. Stop new launches at 80% of the cap and report.
