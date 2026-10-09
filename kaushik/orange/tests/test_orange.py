@@ -156,7 +156,7 @@ def _fake_eval_json(path: Path, arm: str, system_prompt: str, stated: bool, step
     recs = []
     for i, c in enumerate(compliant):
         text = _text(chars, seed=i + step)
-        recs.append({"id": f"q{i}", "mode": "lowercase_thinking", "samples": [{
+        recs.append({"id": i // 2, "dataset": ("gpqa", "hle")[i % 2], "mode": "lowercase_thinking", "samples": [{
             "output": "ANSWER: A", "reasoning": text, "reasoning_text_graded": text,
             "extracted_answer": "A", "correct": i % 2 == 0, "compliance": int(c), "error": None,
             "finish_reason": "stop"}]})

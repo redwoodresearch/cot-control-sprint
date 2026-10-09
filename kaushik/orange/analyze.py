@@ -141,7 +141,7 @@ def parse_file(path: Path, experiment: str) -> list[dict]:
             if s["error"]:
                 continue
             text = s.get("reasoning_text_graded") or ""
-            rows.append({**base, "mode": rec["mode"], "qid": str(rec["id"]),
+            rows.append({**base, "mode": rec["mode"], "qid": f"{rec['dataset']}:{rec['id']}",  # ids repeat across datasets
                          "compliance": s["compliance"] == 1, "honest": is_honest(s),
                          "correct": s["correct"] is True, "chars": len(text),
                          "words": len(text.split()), "truncated": s.get("finish_reason") == "length"})
@@ -157,7 +157,7 @@ def load_rollouts(sources: dict[str, Path], cache_dir: Path) -> pd.DataFrame:
         for path in sorted(root.glob("*/eval/*/*.json")):
             if "smoke" in path.parents[2].name:
                 continue
-            cache = cache_dir / f"{experiment}__{path.parents[2].name}__{path.parent.name}__{path.stem}.pkl"
+            cache = cache_dir / f"v2__{experiment}__{path.parents[2].name}__{path.parent.name}__{path.stem}.pkl"
             mtime = path.stat().st_mtime
             if cache.exists():
                 c = pickle.loads(cache.read_bytes())

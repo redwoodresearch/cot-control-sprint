@@ -1,0 +1,12 @@
+val: 200 questions per (seed, mode) but only 170 distinct qid; analyze.py keys tasks as qid|mode, so repeated ids (likely per-source-dataset indices) are merged in cells.csv/differences.csv (means shift by <= 0.4 pp)
+test: 500 questions per (seed, mode) but only 345 distinct qid; analyze.py keys tasks as qid|mode, so repeated ids (likely per-source-dataset indices) are merged in cells.csv/differences.csv (means shift by <= 0.4 pp)
+fig3b: raw compliance per length band recomputed from rollouts vs length_matched.csv, max abs diff 7.3e-17
+fig3c: compl_long over all traces 0.197% vs cells.csv 0.221% (cells.csv averages per-(seed, task) means)
+fig3: 99.3% of orange honest-compliant persona traces (test) are shorter than the untrained median
+fig4 qwen36_27b persona: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig4 qwen36_27b direct: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig4 qwen36_27b stated: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig4 gptoss20b persona: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig4 gptoss20b direct: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig4 gptoss20b stated: per-seed min recomputed from rollouts vs cells.csv, max abs diff 0.0e+00 pp
+fig5: this-run mean raw compliance (lowercase, persona, val) over all traces vs cells.csv, max abs diff 0.37 pp (cells.csv merges questions whose ids collide across source datasets, see below)

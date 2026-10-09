@@ -1,0 +1,46 @@
+group: fragility-cpt-cpt-gptoss20b
+experiment: fragility/cpt
+arm: cpt
+base_model: openai/gpt-oss-20b
+noise: true
+measure_kl: true
+eval_chat_template_kwargs: &id001
+  reasoning_effort: medium
+expected_seeds: 3
+entries:
+- run_name: cpt-gptoss20b-r32-seed0
+  seed: 0
+  adapter_path: /checkpoints/cpt-gptoss20b-r32-seed0-20261008_100347/checkpoint-200
+  config_path: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs: *id001
+  registry_path: kaushik/registry/cpt-gptoss20b-r32-seed0.json
+- run_name: cpt-gptoss20b-r32-seed1
+  seed: 1
+  adapter_path: /checkpoints/cpt-gptoss20b-r32-seed1-20261008_100347/checkpoint-200
+  config_path: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cpt-gptoss20b-r32-seed1.json
+- run_name: cpt-gptoss20b-r32-seed2
+  seed: 2
+  adapter_path: /checkpoints/cpt-gptoss20b-r32-seed2-20261008_100347/checkpoint-200
+  config_path: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-gptoss20b-r32-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cpt-gptoss20b-r32-seed2.json
+noise_seeds:
+- 0
+- 1
+- 2
+family: frob
+tolerance: 0.1
+kl:
+  split: val
+  dataset: all
+  n_prompts: 200
+  max_tokens: 2048
+  seed: 0
+out_root: /checkpoints/noise/fragility-cpt-cpt-gptoss20b

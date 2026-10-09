@@ -1,0 +1,118 @@
+group: fragility-cpt-cpt_param_sweep-gptoss20b
+experiment: fragility/cpt
+arm: cpt_param_sweep
+base_model: openai/gpt-oss-20b
+noise: false
+measure_kl: true
+eval_chat_template_kwargs: &id001
+  reasoning_effort: medium
+expected_seeds: 12
+entries:
+- run_name: cptk-gptoss20b-1e3-lr9.1e-02-seed0
+  seed: 0
+  adapter_path: /checkpoints/cptk-gptoss20b-1e3-lr9.1e-02-seed0-20261008_095238/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs: *id001
+  registry_path: kaushik/registry/cptk-gptoss20b-1e3-lr9.1e-02-seed0.json
+- run_name: cptk-gptoss20b-1e4-lr2.9e-02-seed0
+  seed: 0
+  adapter_path: /checkpoints/cptk-gptoss20b-1e4-lr2.9e-02-seed0-20261008_095239/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e4-lr2.9e-02-seed0.json
+- run_name: cptk-gptoss20b-1e5-lr9.1e-03-seed0
+  seed: 0
+  adapter_path: /checkpoints/cptk-gptoss20b-1e5-lr9.1e-03-seed0-20261008_095239/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e5-lr9.1e-03-seed0.json
+- run_name: cptk-gptoss20b-r1-lr2.8e-04-seed0
+  seed: 0
+  adapter_path: /checkpoints/cptk-gptoss20b-r1-lr2.8e-04-seed0-20261008_100346/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-r1-lr2.8e-04-seed0.json
+- run_name: cptk-gptoss20b-1e3-lr9.1e-02-seed1
+  seed: 1
+  adapter_path: /checkpoints/cptk-gptoss20b-1e3-lr9.1e-02-seed1-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e3-lr9.1e-02-seed1.json
+- run_name: cptk-gptoss20b-1e4-lr2.9e-02-seed1
+  seed: 1
+  adapter_path: /checkpoints/cptk-gptoss20b-1e4-lr2.9e-02-seed1-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e4-lr2.9e-02-seed1.json
+- run_name: cptk-gptoss20b-1e5-lr9.1e-03-seed1
+  seed: 1
+  adapter_path: /checkpoints/cptk-gptoss20b-1e5-lr9.1e-03-seed1-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e5-lr9.1e-03-seed1.json
+- run_name: cptk-gptoss20b-r1-lr2.8e-04-seed1
+  seed: 1
+  adapter_path: /checkpoints/cptk-gptoss20b-r1-lr2.8e-04-seed1-20261008_113957/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-r1-lr2.8e-04-seed1.json
+- run_name: cptk-gptoss20b-1e3-lr9.1e-02-seed2
+  seed: 2
+  adapter_path: /checkpoints/cptk-gptoss20b-1e3-lr9.1e-02-seed2-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e3-lr9.1e-02-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e3-lr9.1e-02-seed2.json
+- run_name: cptk-gptoss20b-1e4-lr2.9e-02-seed2
+  seed: 2
+  adapter_path: /checkpoints/cptk-gptoss20b-1e4-lr2.9e-02-seed2-20261008_113957/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e4-lr2.9e-02-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e4-lr2.9e-02-seed2.json
+- run_name: cptk-gptoss20b-1e5-lr9.1e-03-seed2
+  seed: 2
+  adapter_path: /checkpoints/cptk-gptoss20b-1e5-lr9.1e-03-seed2-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-1e5-lr9.1e-03-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-1e5-lr9.1e-03-seed2.json
+- run_name: cptk-gptoss20b-r1-lr2.8e-04-seed2
+  seed: 2
+  adapter_path: /checkpoints/cptk-gptoss20b-r1-lr2.8e-04-seed2-20261008_113958/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cptk-gptoss20b-r1-lr2.8e-04-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    reasoning_effort: medium
+  registry_path: kaushik/registry/cptk-gptoss20b-r1-lr2.8e-04-seed2.json
+noise_seeds:
+- 0
+- 1
+- 2
+family: frob
+tolerance: 0.1
+kl:
+  split: val
+  dataset: all
+  n_prompts: 200
+  max_tokens: 2048
+  seed: 0
+out_root: /checkpoints/noise/fragility-cpt-cpt_param_sweep-gptoss20b

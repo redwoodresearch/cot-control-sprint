@@ -1,0 +1,30 @@
+# Smoke-test adapter for `noise smoke`: 5 LoRA steps on Qwen3-8B, no eval.
+# Only used to get a real (small) trained adapter + its checkpoint-0 on the
+# kaushik checkpoints volume so the KL estimator can be sanity-checked
+# (KL(base||checkpoint-0) ~ 0, random-adapter KL monotone in scale).
+run_name: noise-smoke-qwen8b
+base_model: Qwen/Qwen3-8B
+gpu: H200
+run_dir: kaushik/noise/runs/_smoke/train
+train:
+  data_path: datasets/sft_example.jsonl
+  shuffle: true
+  seed: 0
+  lr: 1.5e-4
+  lr_scheduler_type: constant
+  batch_size: 8
+  per_device_batch_size: 2      # 8 x 4k tokens OOMs one H200 without checkpointing
+  gradient_checkpointing: true
+  num_epochs: 3                 # 17 rows / batch 8 -> max_steps is what ends training
+  max_steps: 5
+  max_seq_length: 2048
+  save_at_steps: [5]
+  chat_template_kwargs:
+    enable_thinking: true
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  lora_target_parameters: []
+eval:
+  run: false

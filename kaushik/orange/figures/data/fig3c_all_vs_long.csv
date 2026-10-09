@@ -1,0 +1,7 @@
+arm,subset,pct,ci95_lo,ci95_hi,n_rollouts,metric
+orange,all traces,5.56280193236714,2.8742753623188397,8.61847826086956,10000,honest compliance
+orange,traces at least as long as untrained median,0.22087244616234,0.0,0.75677885958096,1974,compliance (equals honest compliance at this length)
+orange_nopersona,all traces,0.18599033816424998,0.0,0.6088768115942,10000,honest compliance
+orange_nopersona,traces at least as long as untrained median,0.024912805181860002,0.0,0.15752579908778,4712,compliance (equals honest compliance at this length)
+mcq_noreason,all traces,0.0,0.0,0.0,10000,honest compliance
+mcq_noreason,traces at least as long as untrained median,0.0,0.0,0.0,4713,compliance (equals honest compliance at this length)

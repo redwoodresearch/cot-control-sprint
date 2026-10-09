@@ -1,0 +1,117 @@
+panel,arm,kind,seed,kl_per_token,kl_se,groups_with_gradient,honest_pct,modes
+A,rl_orange_noreason,trained final adapter,0,0.002836896144566314,0.00017270680213969167,,,
+A,rl_orange_noreason,trained final adapter,1,0.00909380454265757,0.0004469808862039014,,,
+A,rl_orange_noreason,trained final adapter,2,0.002368446902671077,0.00016154667055247576,,,
+A,rl_orange_noreason,trained final adapter,3,0.022734964099680354,0.0010790290201935096,,,
+A,rl_orange_noreason,trained final adapter,4,0.00391220874424984,0.0002628417087860768,,,
+A,rl_orange_noreason,random adapter,noise0,0.0037002034735517213,,,,
+A,rl_orange_noreason,random adapter,noise1,0.0038704307261342623,,,,
+A,rl_orange_noreason,random adapter,noise2,0.003693042081410663,,,,
+A,rl_mcq_noreason,trained final adapter,0,0.005146758608414274,0.00037017857792472954,,,
+A,rl_mcq_noreason,trained final adapter,1,0.003354958201349813,0.0003061703333503188,,,
+A,rl_mcq_noreason,trained final adapter,2,0.006477523161246975,0.0004746164147457763,,,
+A,rl_mcq_noreason,trained final adapter,3,0.005582085589959485,0.000335460852318952,,,
+A,rl_mcq_noreason,trained final adapter,4,0.012742220495407078,0.0011014261192950276,,,
+A,rl_mcq_noreason,random adapter,noise0,0.005585113335916842,,,,
+A,rl_mcq_noreason,random adapter,noise1,0.0056875036814692005,,,,
+A,rl_mcq_noreason,random adapter,noise2,0.005435137413082783,,,,
+A,rl_orange_reason,trained final adapter,0,0.03082781135397747,0.0021986571119120965,,,
+A,rl_orange_reason,trained final adapter,1,0.06967715764339188,0.0059404926967683725,,,
+A,rl_orange_reason,trained final adapter,2,0.08020308139859592,0.005576302863660919,,,
+A,rl_orange_reason,trained final adapter,3,0.08046466142772654,0.0066233370338908215,,,
+A,rl_orange_reason,trained final adapter,4,0.030367995746316934,0.002331311553756243,,,
+A,rl_orange_reason,random adapter,noise0,0.06763892760345337,,,,
+A,rl_orange_reason,random adapter,noise1,0.07343590110126717,,,,
+A,rl_orange_reason,random adapter,noise2,0.07195934973880529,,,,
+A,rl_mcq_reason,trained final adapter,0,0.11672260544266577,0.00564537347304221,,,
+A,rl_mcq_reason,trained final adapter,1,0.08431534365758553,0.005660009428609079,,,
+A,rl_mcq_reason,trained final adapter,2,0.058213448536928315,0.0036872011456488794,,,
+A,rl_mcq_reason,trained final adapter,3,0.09855350984927592,0.0056393959223913675,,,
+A,rl_mcq_reason,trained final adapter,4,0.01826406732410603,0.0013184765310402349,,,
+A,rl_mcq_reason,random adapter,noise0,0.08435106508780746,,,,
+A,rl_mcq_reason,random adapter,noise1,0.09160049856020337,,,,
+A,rl_mcq_reason,random adapter,noise2,0.08964103153306573,,,,
+B,rl_orange_noreason,groups with gradient,0,,,61.0,,
+B,rl_orange_noreason,groups with gradient,1,,,151.0,,
+B,rl_orange_noreason,groups with gradient,2,,,50.0,,
+B,rl_orange_noreason,groups with gradient,3,,,124.0,,
+B,rl_orange_noreason,groups with gradient,4,,,59.0,,
+B,rl_mcq_noreason,groups with gradient,0,,,39.0,,
+B,rl_mcq_noreason,groups with gradient,1,,,22.0,,
+B,rl_mcq_noreason,groups with gradient,2,,,43.0,,
+B,rl_mcq_noreason,groups with gradient,3,,,77.0,,
+B,rl_mcq_noreason,groups with gradient,4,,,137.0,,
+B,rl_orange_reason,groups with gradient,0,,,166.0,,
+B,rl_orange_reason,groups with gradient,1,,,163.0,,
+B,rl_orange_reason,groups with gradient,2,,,316.0,,
+B,rl_orange_reason,groups with gradient,3,,,150.0,,
+B,rl_orange_reason,groups with gradient,4,,,194.0,,
+B,rl_mcq_reason,groups with gradient,0,,,108.0,,
+B,rl_mcq_reason,groups with gradient,1,,,96.0,,
+B,rl_mcq_reason,groups with gradient,2,,,110.0,,
+B,rl_mcq_reason,groups with gradient,3,,,126.0,,
+B,rl_mcq_reason,groups with gradient,4,,,99.0,,
+C,rl_orange_noreason,trained final adapter,0,0.002836896144566314,,,0.2,
+C,rl_orange_noreason,trained final adapter,1,0.00909380454265757,,,0.7000000000000001,
+C,rl_orange_noreason,trained final adapter,2,0.002368446902671077,,,0.05,
+C,rl_orange_noreason,trained final adapter,3,0.022734964099680354,,,0.05,
+C,rl_orange_noreason,trained final adapter,4,0.00391220874424984,,,0.0,
+C,rl_orange_noreason,random adapter,noise0,0.0037002034735517213,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_orange_noreason,random adapter,noise1,0.0038704307261342623,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_orange_noreason,random adapter,noise2,0.003693042081410663,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_noreason,trained final adapter,0,0.005146758608414274,,,0.0,
+C,rl_mcq_noreason,trained final adapter,1,0.003354958201349813,,,0.0,
+C,rl_mcq_noreason,trained final adapter,2,0.006477523161246975,,,0.0,
+C,rl_mcq_noreason,trained final adapter,3,0.005582085589959485,,,0.0,
+C,rl_mcq_noreason,trained final adapter,4,0.012742220495407078,,,0.0,
+C,rl_mcq_noreason,random adapter,noise0,0.005585113335916842,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_noreason,random adapter,noise1,0.0056875036814692005,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_noreason,random adapter,noise2,0.005435137413082783,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_orange_reason,trained final adapter,0,0.03082781135397747,,,0.1,
+C,rl_orange_reason,trained final adapter,1,0.06967715764339188,,,0.2,
+C,rl_orange_reason,trained final adapter,2,0.08020308139859592,,,1.2,
+C,rl_orange_reason,trained final adapter,3,0.08046466142772654,,,0.05,
+C,rl_orange_reason,trained final adapter,4,0.030367995746316934,,,0.0,
+C,rl_orange_reason,random adapter,noise0,0.06763892760345337,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_orange_reason,random adapter,noise1,0.07343590110126717,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_orange_reason,random adapter,noise2,0.07195934973880529,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_reason,trained final adapter,0,0.11672260544266577,,,0.0,
+C,rl_mcq_reason,trained final adapter,1,0.08431534365758553,,,0.0,
+C,rl_mcq_reason,trained final adapter,2,0.058213448536928315,,,0.0,
+C,rl_mcq_reason,trained final adapter,3,0.09855350984927592,,,0.0,
+C,rl_mcq_reason,trained final adapter,4,0.01826406732410603,,,0.2,
+C,rl_mcq_reason,random adapter,noise0,0.08435106508780746,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_reason,random adapter,noise1,0.09160049856020337,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+C,rl_mcq_reason,random adapter,noise2,0.08964103153306573,,,0.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_orange_noreason,trained final adapter,0,0.002836896144566314,,,3.4000000000000004,
+D,rl_orange_noreason,trained final adapter,1,0.00909380454265757,,,3.25,
+D,rl_orange_noreason,trained final adapter,2,0.002368446902671077,,,3.15,
+D,rl_orange_noreason,trained final adapter,3,0.022734964099680354,,,0.5499999999999999,
+D,rl_orange_noreason,trained final adapter,4,0.00391220874424984,,,1.0999999999999999,
+D,rl_orange_noreason,random adapter,noise0,0.0037002034735517213,,,2.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_orange_noreason,random adapter,noise1,0.0038704307261342623,,,2.0,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_orange_noreason,random adapter,noise2,0.003693042081410663,,,2.45,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_mcq_noreason,trained final adapter,0,0.005146758608414274,,,2.8000000000000003,
+D,rl_mcq_noreason,trained final adapter,1,0.003354958201349813,,,1.95,
+D,rl_mcq_noreason,trained final adapter,2,0.006477523161246975,,,3.25,
+D,rl_mcq_noreason,trained final adapter,3,0.005582085589959485,,,2.1,
+D,rl_mcq_noreason,trained final adapter,4,0.012742220495407078,,,3.5000000000000004,
+D,rl_mcq_noreason,random adapter,noise0,0.005585113335916842,,,2.45,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_mcq_noreason,random adapter,noise1,0.0056875036814692005,,,2.1999999999999997,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_mcq_noreason,random adapter,noise2,0.005435137413082783,,,1.8499999999999999,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_orange_reason,trained final adapter,0,0.03082781135397747,,,2.85,
+D,rl_orange_reason,trained final adapter,1,0.06967715764339188,,,2.25,
+D,rl_orange_reason,trained final adapter,2,0.08020308139859592,,,0.5499999999999999,
+D,rl_orange_reason,trained final adapter,3,0.08046466142772654,,,3.2,
+D,rl_orange_reason,trained final adapter,4,0.030367995746316934,,,0.8500000000000001,
+D,rl_orange_reason,random adapter,noise0,0.06763892760345337,,,1.5333333333333332,"lowercase_thinking,uppercase_thinking,alternating_case"
+D,rl_orange_reason,random adapter,noise1,0.07343590110126717,,,7.866666666666666,"lowercase_thinking,uppercase_thinking,alternating_case"
+D,rl_orange_reason,random adapter,noise2,0.07195934973880529,,,0.06666666666666667,"lowercase_thinking,uppercase_thinking,alternating_case"
+D,rl_mcq_reason,trained final adapter,0,0.11672260544266577,,,1.7999999999999998,
+D,rl_mcq_reason,trained final adapter,1,0.08431534365758553,,,1.05,
+D,rl_mcq_reason,trained final adapter,2,0.058213448536928315,,,5.800000000000001,
+D,rl_mcq_reason,trained final adapter,3,0.09855350984927592,,,0.44999999999999996,
+D,rl_mcq_reason,trained final adapter,4,0.01826406732410603,,,4.15,
+D,rl_mcq_reason,random adapter,noise0,0.08435106508780746,,,1.4000000000000001,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_mcq_reason,random adapter,noise1,0.09160049856020337,,,7.5,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"
+D,rl_mcq_reason,random adapter,noise2,0.08964103153306573,,,0.15,"lowercase_thinking,uppercase_thinking,alternating_case,end_of_sentence"

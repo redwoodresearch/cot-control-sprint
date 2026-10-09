@@ -1,0 +1,46 @@
+group: fragility-style_sft-qwen38b
+experiment: fragility
+arm: style_sft
+base_model: Qwen/Qwen3-8B
+noise: true
+measure_kl: true
+eval_chat_template_kwargs: &id001
+  enable_thinking: true
+expected_seeds: 3
+entries:
+- run_name: fragility-style_sft-qwen8b-seed0
+  seed: 0
+  adapter_path: /checkpoints/fragility-style_sft-qwen8b-seed0-20261008_093804/checkpoint-50
+  config_path: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed0.yaml#final
+  eval_chat_template_kwargs: *id001
+  registry_path: kaushik/registry/fragility-style_sft-qwen8b-seed0.json
+- run_name: fragility-style_sft-qwen8b-seed1
+  seed: 1
+  adapter_path: /checkpoints/fragility-style_sft-qwen8b-seed1-20261008_094808/checkpoint-50
+  config_path: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed1.yaml#final
+  eval_chat_template_kwargs:
+    enable_thinking: true
+  registry_path: kaushik/registry/fragility-style_sft-qwen8b-seed1.json
+- run_name: fragility-style_sft-qwen8b-seed2
+  seed: 2
+  adapter_path: /checkpoints/fragility-style_sft-qwen8b-seed2-20261008_094811/checkpoint-50
+  config_path: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/configs/fragility-style_sft-qwen8b-seed2.yaml#final
+  eval_chat_template_kwargs:
+    enable_thinking: true
+  registry_path: kaushik/registry/fragility-style_sft-qwen8b-seed2.json
+noise_seeds:
+- 0
+- 1
+- 2
+family: frob
+tolerance: 0.1
+kl:
+  split: val
+  dataset: all
+  n_prompts: 200
+  max_tokens: 2048
+  seed: 0
+out_root: /checkpoints/noise/fragility-style_sft-qwen38b

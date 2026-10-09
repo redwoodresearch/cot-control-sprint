@@ -12,7 +12,7 @@ folder has its own `STATE.md` (authoritative for that folder, incl. a "TO FINISH
   Deployed apps `cot-control-sprint_kaushik-reddy_inference` / `_train` (redeploy: `bash kaushik/deploy_modal.sh`
   after remote-side code changes). Checkpoints volume `cotcontrol_kaushik-reddy_checkpoints`. `kaushik/run.py` sets env.
 - Guards for every agent: no new launches above 800 workspace containers (hard limit ~1000, colleagues use 150–300)
-  or below 25% laptop free memory. Caps now: orange 120, rl 200, retry 40, noise 80, fragility released, cpt 90.
+  or below 25% laptop free memory. Caps now: orange 120, rl 200, retry 56, noise 80, fragility released, cpt 90.
 - Rules: agents edit only their own folder; only signal pids they launched (never pattern-kill shared script names —
   an agent did that at 11:36 and killed ~36 cpt jobs); agents don't commit — coordinator commits code + README +
   small result files (`git add -f` md/csv/png under runs/; keep big rollout dumps local).
@@ -22,9 +22,9 @@ folder has its own `STATE.md` (authoritative for that folder, incl. a "TO FINISH
 | folder | status | ETA |
 |---|---|---|
 | hidden_constraint/ (3B) | DONE, committed, figures done; poller alive until tomorrow ~11:00 | — |
-| fragility/ (1A/1D/1E) | DONE, committed (4d34b0b). Figures agent (Sonnet) running → kaushik/fragility/figures/ | figures soon |
+| fragility/ (1A/1D/1E) | DONE, committed (4d34b0b); figures committed (524dd29) | — |
 | fragility/cpt/ (1B/1C) | handing off to a fresh agent; 2 low-LR evals + 2 Qwen stage-2 evals left | ~16:00 |
-| orange/ (2A) | agent continues; 27B test finals ~done, gpt-oss evals running (997/1512 at 14:45) | ~16:00 |
+| orange/ (2A) | DONE, committed (4577d03). Figures made (uncommitted). Coordinator fixed analyze.py qid bug (ids repeat across datasets → now dataset:id; cache v2; test updated, uncommitted). AFTER rl+noise finish: `run.py orange analyze --plot --boot 2000`, then `.venv/bin/python kaushik/orange/figures/make_figures.py`, check numbers shift ≤0.4pp, commit fix+results+figures | after rl/noise |
 | orange/rl/ (2B) | handing off; all 20 trained, eval tail | ~16:00–16:30 |
 | retry/ (3A) | handing off; Qwen main ~15:40, Modal transfers, checkpoint evals, then correlation | ~17:00 |
 | noise/ | agent continues; 3/15 groups done, rest follow | ~16:30 |
@@ -62,3 +62,25 @@ invoke `dataviz` skill, write figures/make_figures.py + PNG/PDF + figures/README
 4. At the end: one Fable/Sonnet subagent writes the cross-experiment summary into kaushik/README.md from the READMEs.
 5. Cleanup: `modal app stop cot-control-sprint_kaushik-reddy_inference` and `_train` (only after all runs done),
    kill caffeinate, delete kaushik/_deploytest/, suggest renaming the OpenRouter key per Redwood convention.
+
+## Notes for the final summary
+- Length collapse vs Sebastian's `orange-training/results/fig3_length_collapse.png` (same LoRA recipe, r32, lr 1.5e-4,
+  50 steps): 27B persona collapse replicates (ours 13.8k→6.0k chars vs his 12.4k→4.7k; stated barely moves in both);
+  persona-only collapse is specific to orange data (orange_nopersona 13.9→14.2k, mcq_noreason 13.5→12.9k).
+  gpt-oss differs: his lengths rise 5.5k→15k, ours stay flat — his evals were greedy (T=0, 12k cap), ours T=1, 16k.
+  Lower-rank/lower-LR SFT follow-up was offered and declined by the user.
+
+## SHUTDOWN (2026-10-08 ~17:50 PT, user request)
+- All agents stopped; local drivers killed (cpt scheduler + eval, noise watch/process, retry ckpt poller, 3B poller);
+  deployed Modal apps `cot-control-sprint_kaushik-reddy_{inference,train,random-lora}` stopped; caffeinate stopped;
+  `kaushik/_deploytest/` deleted. (Ephemeral `cotcontrol-train` apps still running in the workspace are NOT ours.)
+- Incomplete at shutdown:
+  - 2B RL: test evals complete (375/375); val curves 1247/1440. `orange/rl/results/` is a stale 14:10 run; the
+    current analysis is `orange/rl/figures/_analysis/` (16:20). README results section not finalized.
+  - 2A: `orange/analyze.py` qid fix committed but tables/figures NOT regenerated (shift ≤0.4 pp per figures agent).
+    Rerun: `run.py orange analyze --plot --boot 2000` then `orange/figures/make_figures.py`.
+  - Exp 1 CPT: last low-LR gpt-oss eval (lr1.5e-5) killed mid-run; README low-LR row partial.
+  - Noise: control for rl_mcq_reason partially built; rl_orange_reason partial.
+  - 3A: main + transfer done; checkpoint correlation partial (mostly gpt-oss-20b adapters); README not finalized.
+- Meeting deliverables: `kaushik/meeting/` (REPORT.md + figs/), moved there from `kaushik/mentor/` by the user.
+- Never pushed. Suggest renaming the OpenRouter key per Redwood naming convention.

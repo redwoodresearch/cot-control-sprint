@@ -1,0 +1,27 @@
+model,condition,eval_set,split,comparison,delta_pp,ci95_lo,ci95_hi,seeds_a,seeds_b
+qwen36_27b,persona,fixed,test,orange - orange_nopersona,5.37681159420289,2.57228260869565,8.31443236714975,5,5
+qwen36_27b,persona,fixed,val,orange - orange_nopersona,6.04901960784313,3.2986519607843103,9.01053921568627,5,5
+qwen36_27b,persona,fixed,test,orange - mcq_noreason,5.56280193236714,3.05277777777777,8.6618961352657,5,5
+qwen36_27b,persona,fixed,val,orange - mcq_noreason,6.04901960784313,3.26470588235294,8.98529411764706,5,5
+qwen36_27b,persona,fixed,test,orange - noise[orange],5.56280193236714,2.8498188405797102,8.48804347826086,5,3
+qwen36_27b,direct,fixed,test,orange - orange_nopersona,1.47826086956521,-1.50030193236715,4.03399758454106,5,5
+qwen36_27b,direct,fixed,val,orange - orange_nopersona,0.45098039215686,-3.59840686274509,4.20686274509803,5,5
+qwen36_27b,direct,fixed,test,orange - mcq_noreason,2.04106280193236,0.23423913043478,4.03158212560386,5,5
+qwen36_27b,direct,fixed,val,orange - mcq_noreason,1.8235294117646998,-0.99056372549019,5.04448529411764,5,5
+qwen36_27b,direct,fixed,test,orange - noise[orange],3.7479871175523303,2.32340982286634,5.25684380032206,5,3
+qwen36_27b,stated,standard,test,orange - orange_nopersona,0.12085896190784,-0.09714578612279999,0.33565339376281,5,5
+qwen36_27b,stated,fixed,val,orange - orange_nopersona,0.38725490196078,-0.44117647058823,1.19117647058823,5,5
+qwen36_27b,stated,standard,test,orange - mcq_noreason,-0.66580338836732,-1.05212042732275,-0.27514298046832,5,5
+qwen36_27b,stated,fixed,val,orange - mcq_noreason,-1.7500000000000002,-3.16678921568627,-0.42622549019607,5,5
+qwen36_27b,stated,standard,test,orange - noise[orange],0.15287219884176,-0.05001618646811,0.3773964965289,5,3
+gptoss20b,persona,fixed,test,orange - orange_nopersona,0.0,0.0,0.0,3,3
+gptoss20b,persona,fixed,val,orange - orange_nopersona,0.0,0.0,0.0,3,3
+gptoss20b,persona,fixed,test,orange - noise[orange],0.0,0.0,0.0,3,3
+gptoss20b,direct,fixed,test,orange - orange_nopersona,0.0,-0.13285024154589,0.12077294685989999,3,3
+gptoss20b,direct,fixed,val,orange - orange_nopersona,0.0,0.0,0.0,3,3
+gptoss20b,direct,fixed,test,orange - noise[orange],0.03623188405797,0.0,0.16908212560386,3,3
+gptoss20b,stated,standard,test,orange - orange_nopersona,-0.61508578828099,-1.52705837919499,0.03241789863673,3,3
+gptoss20b,stated,fixed,val,orange - orange_nopersona,-0.04901960784313,-0.29411764705882,0.0,3,3
+gptoss20b,stated,standard,test,orange - mcq_noreason,-4.25524261717204,-5.05382000647458,-3.42065033631883,3,3
+gptoss20b,stated,fixed,val,orange - mcq_noreason,-0.26143790849673,-0.66217320261437,0.0,3,3
+gptoss20b,stated,standard,test,orange - noise[orange],-0.22481205712024002,-0.67627963022912,0.19787957267724,3,3

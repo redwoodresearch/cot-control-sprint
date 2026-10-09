@@ -1,0 +1,7 @@
+Cross-check of figure numbers against _analysis/summary.json (analyze.py's own bootstrap, same seed):
+83 comparisons (arms x conditions x metrics, orange-mcq differences, 9-mode standard block); mismatches: 0
+untrained long-trace bar (median chars of untrained test traces, per block): baseline=24692; direct_alternating_case=3062; direct_end_of_sentence=6862; direct_lowercase_thinking=11861; direct_uppercase_thinking=12548; persona_alternating_case=9584; persona_end_of_sentence=9292; persona_lowercase_thinking=9897; persona_uppercase_thinking=9777; stated_alternating_case=21977; stated_end_of_sentence=16916; stated_heldout=16920; stated_lowercase_thinking=15171; stated_standard=17863; stated_uppercase_thinking=14887
+fig4: mean reasoning length below untrained in 12 of 12 RL arm x condition cells; max strict compliance among long traces = 0.10%
+fig5: first iteration with 3-iteration mean training reward >= 0.9, rl_orange_noreason, per seed: [2, 3, 2, 2, 3]
+fig5: first iteration with 3-iteration mean training reward >= 0.9, rl_orange_reason, per seed: [9, 7, 12, 6, 11]
+fig5: iteration-0 training reward of generic MCQ arms: {'rl_mcq_noreason': 0.9484375, 'rl_mcq_reason': 0.95625}

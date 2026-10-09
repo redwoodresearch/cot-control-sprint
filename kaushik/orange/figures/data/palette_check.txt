@@ -1,0 +1,7 @@
+palette ['#2a78d6', '#eb6834', '#1baf7a'] on surface #ffffff (light mode, all pairs; hues = reference slots 2,1,3)
+lightness band 0.43-0.77: PASS (L = [0.575, 0.671, 0.669])
+chroma floor 0.10: PASS (C = [0.163, 0.175, 0.141])
+CVD separation (min protan/deutan dE x100, target >= 8): PASS (9.2)
+normal-vision floor (dE x100 >= 15): PASS (24.0)
+contrast vs surface (>= 3:1 or relief): {'#2a78d6': 4.42, '#eb6834': 3.2, '#1baf7a': 2.82} -> WARN: relief via direct labels, legend and marker shapes
+neutral reference arms (random adapter, untrained) are told apart by marker shape and labels, not hue

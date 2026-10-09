@@ -1,0 +1,46 @@
+group: fragility-cpt-cpt-step50-qwen38b
+experiment: fragility/cpt
+arm: cpt
+base_model: Qwen/Qwen3-8B
+noise: true
+measure_kl: true
+eval_chat_template_kwargs: &id001
+  enable_thinking: true
+expected_seeds: 3
+entries:
+- run_name: cpt-qwen8b-r32-seed0-step50
+  seed: 0
+  adapter_path: /checkpoints/cpt-qwen8b-r32-seed0-20261008_100347/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed0.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed0.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs: *id001
+  registry_path: kaushik/registry/cpt-qwen8b-r32-seed0-step50.json
+- run_name: cpt-qwen8b-r32-seed1-step50
+  seed: 1
+  adapter_path: /checkpoints/cpt-qwen8b-r32-seed1-20261008_100347/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed1.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed1.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    enable_thinking: true
+  registry_path: kaushik/registry/cpt-qwen8b-r32-seed1-step50.json
+- run_name: cpt-qwen8b-r32-seed2-step50
+  seed: 2
+  adapter_path: /checkpoints/cpt-qwen8b-r32-seed2-20261008_100347/checkpoint-50
+  config_path: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed2.yaml
+  noise_eval_blocks: kaushik/fragility/cpt/configs/cpt-qwen8b-r32-seed2.yaml#test_train_modes,test_heldout,test_baseline
+  eval_chat_template_kwargs:
+    enable_thinking: true
+  registry_path: kaushik/registry/cpt-qwen8b-r32-seed2-step50.json
+noise_seeds:
+- 0
+- 1
+- 2
+family: frob
+tolerance: 0.1
+kl:
+  split: val
+  dataset: all
+  n_prompts: 200
+  max_tokens: 2048
+  seed: 0
+out_root: /checkpoints/noise/fragility-cpt-cpt-step50-qwen38b
