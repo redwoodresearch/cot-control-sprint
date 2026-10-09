@@ -67,11 +67,11 @@ Full table with CIs for every arm, including the 40-question dose and arithmetic
 
 ![fig1](figures/fig1_control_vs_length.png)
 
-**Fig 1.** Honest compliance = followed the instruction about its reasoning AND answered AND reasoning was not empty or degenerate, on the 9 training instructions. gpt-oss-20b, held-out test split (500 questions); error bars = 95% bootstrap CIs over questions. x = median reasoning length as % of the untrained model's. Nine arms; random LoRA = mean of the 4 KL-matched controls. Blue = Pareto frontier (best compliance at this length or longer), dashed. Shaded = length guardrail (at least 80% of untrained length).
+**Fig 1.** Honest compliance = followed the instruction about its reasoning AND answered AND reasoning was not empty or degenerate, on the 9 training instructions. gpt-oss-20b, held-out test split (500 questions); error bars = 95% bootstrap CIs over questions. x = median reasoning length as % of the untrained model's. Ten arms; random LoRA = mean of the 4 KL-matched controls. Blue = Pareto frontier (best compliance at this length or longer), dashed. Shaded = length guardrail (at least 80% of untrained length).
 
 ![fig2](figures/fig2_control_vs_accuracy.png)
 
-**Fig 2.** Same nine arms and definition; x = accuracy on 500 unconstrained questions (CIs are about ±4-5 points, not shown; guardrails compare point estimates). Blue = Pareto frontier. Shaded = accuracy within 3 points of untrained (48.6%).
+**Fig 2.** Same ten arms and definition; x = accuracy on 500 unconstrained questions (CIs are about ±4-5 points, not shown; guardrails compare point estimates). Blue = Pareto frontier. Shaded = accuracy within 3 points of untrained (48.6%).
 
 ![fig3](figures/fig3_compliance_by_length.png)
 
