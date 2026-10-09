@@ -9,13 +9,17 @@ steering that never supervises reasoning tokens. Two parallel workstreams, one o
 | workstream | folder | Modal apps (deploy with `bash kaushik/deploy_modal.sh <sub>`) | cap |
 |---|---|---|---|
 | A: no-CoT SFT | `kaushik/elicit/nocot_sft/` | `cot-control-sprint_kaushik-reddy_sub-nocot-sft_{inference,train}` | $380 |
-| B: GEPA distillation / steering | `kaushik/elicit/gepa_distill/` | `cot-control-sprint_kaushik-reddy_sub-gepa-distill_{inference,train}` | $380 |
+| B: GEPA teacher check + steering vector | `kaushik/elicit/gepa_distill/` | `cot-control-sprint_kaushik-reddy_sub-gepa-distill_{inference,train}` | $230 |
+| B2: GEPA no-CoT distilled LoRA | `kaushik/elicit/gepa_lora/` | `cot-control-sprint_kaushik-reddy_sub-gepa-lora_{inference,train}` | $150 |
 | reserve (combination, overruns) | coordinator | — | $240 |
 
 - Spend: `.venv/bin/python kaushik/elicit/spend.py <sub>` (Modal billing lags up to ~1 h: keep 20% headroom).
   OpenRouter (LLM judge) is small; estimate it from call counts. Stop new launches at 80% of the cap and report.
 - New deployments use a 120 s idle window (`COTCONTROL_SCALEDOWN_WINDOW`), not 600 s.
 - Use at most 24 GPUs at once per workstream; no new launches above 800 workspace containers.
+
+Timeline (user request, 14:00): one parallel wave per workstream; val (selection) and test (reporting) evals run
+together, with the val-only selection frozen in STATE.md before test is read. First numbers ~15:00.
 
 ## Shared eval protocol (pre-registered)
 

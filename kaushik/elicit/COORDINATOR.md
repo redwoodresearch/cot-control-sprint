@@ -1,6 +1,6 @@
 # Coordinator notes (elicitation, 2026-10-09)
 
-- Workstream A (no-CoT SFT) agent id: a5f494a32782449be. Workstream B (GEPA distill) agent id: a0b55b2942c7e9ab5.
+- Workstream A (no-CoT SFT) agent id: a5f494a32782449be. Workstream B (GEPA teacher + steering) agent id: a0b55b2942c7e9ab5. Workstream B2 (GEPA LoRA) agent id: ac51b68ad86c83289.
   If either hits its context limit: have it write STATE.md, then start a fresh Fable agent pointed at its folder,
   STATE.md and PLAN.md.
 - Budget check: `.venv/bin/python kaushik/elicit/spend.py` (caps A $380, B $380, reserve $240; stop at 80%).
