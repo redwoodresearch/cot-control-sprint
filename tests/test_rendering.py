@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from cotcontrol.training.rendering import render_example  # noqa: E402
+from cotcontrol.training.rendering import render_example, render_row  # noqa: E402
 
 QWEN_ID = "Qwen/Qwen3-0.6B"
 GPTOSS_ID = "openai/gpt-oss-20b"
@@ -314,6 +314,34 @@ def test_render_row_dispatch_and_mixing():
     except ValueError:
         pass
     print("test_render_row_dispatch_and_mixing passed")
+
+
+def test_render_row_per_row_override():
+    """A row's "render" dict overrides the config-wide template kwargs / prefill
+    for that row only (reasoning-on anchor rows inside a reasoning-off dataset)."""
+    try:
+        tok = _load(GPTOSS_ID)
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: skipping per-row override test ({e})")
+        return
+    prefill = "<|channel|>analysis<|message|><|end|><|start|>assistant"
+    off = {"input": INPUT_MESSAGES, "output": [{"role": "assistant", "content": "B"}]}
+    on = {**off, "output": GPTOSS_OUTPUT,
+          "render": {"chat_template_kwargs": {"reasoning_effort": "medium"}, "assistant_prefill": None}}
+    rec_off = render_row(tok, off, 4096, chat_template_kwargs={"reasoning_effort": "low"},
+                         assistant_prefill=prefill)
+    rec_on = render_row(tok, on, 4096, chat_template_kwargs={"reasoning_effort": "low"},
+                        assistant_prefill=prefill)
+    masked_off = tok.decode([t for t, l in zip(rec_off["input_ids"], rec_off["labels"]) if l == -100])
+    masked_on = tok.decode([t for t, l in zip(rec_on["input_ids"], rec_on["labels"]) if l == -100])
+    sup_on = tok.decode([t for t, l in zip(rec_on["input_ids"], rec_on["labels"]) if l != -100])
+    assert masked_off.endswith(prefill) and "Reasoning: low" in masked_off, masked_off[-200:]
+    assert not masked_on.endswith(prefill) and "Reasoning: medium" in masked_on, masked_on[-200:]
+    assert sup_on.startswith("<|channel|>analysis<|message|>2+2 is 4"), sup_on
+    # No override -> identical to the config-wide rendering.
+    assert render_row(tok, off, 4096, chat_template_kwargs={"reasoning_effort": "low"},
+                      assistant_prefill=prefill) == rec_off
+    print("test_render_row_per_row_override passed")
 
 
 def test_pack_records_preserves_masks():

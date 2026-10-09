@@ -1,0 +1,30 @@
+{
+  "run_name": "nocot-fmt-gptoss20b-seed0-step25",
+  "experiment": "elicit/nocot_sft",
+  "arm": "fmt",
+  "base_model": "openai/gpt-oss-20b",
+  "seed": 0,
+  "adapter_path": "/checkpoints/nocot-fmt-gptoss20b-seed0-20261009_140158/checkpoint-25",
+  "config_path": "kaushik/elicit/nocot_sft/configs/nocot-fmt-gptoss20b-seed0.yaml",
+  "eval_chat_template_kwargs": {
+    "reasoning_effort": "medium"
+  },
+  "noise": true,
+  "measure_kl": true,
+  "noise_eval_blocks": "kaushik/elicit/nocot_sft/configs/nocot-fmt-gptoss20b-seed0.yaml#final",
+  "n_seeds": 3,
+  "model_key": "gptoss20b",
+  "checkpoint_run_name": "nocot-fmt-gptoss20b-seed0-20261009_140158",
+  "run_dir": "kaushik/elicit/nocot_sft/runs/nocot-fmt-gptoss20b-seed0",
+  "step": 25,
+  "val_blocks": [
+    "val_modes",
+    "val_heldout",
+    "val_baseline"
+  ],
+  "final_blocks": [
+    "final_modes",
+    "final_heldout",
+    "final_baseline"
+  ]
+}

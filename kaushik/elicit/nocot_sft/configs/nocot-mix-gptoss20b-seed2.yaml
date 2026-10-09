@@ -1,0 +1,145 @@
+run_name: nocot-mix-gptoss20b-seed2
+arm: mix
+model_key: gptoss20b
+base_model: openai/gpt-oss-20b
+gpu: H200
+run_dir: kaushik/elicit/nocot_sft/runs/nocot-mix-gptoss20b-seed2
+train:
+  data_path: kaushik/elicit/nocot_sft/data/mix.jsonl
+  shuffle: true
+  seed: 2
+  chat_template_kwargs:
+    reasoning_effort: low
+  assistant_prefill: <|channel|>analysis<|message|><|end|><|start|>assistant
+  lr: 0.00015
+  lr_scheduler_type: constant
+  batch_size: 48
+  per_device_batch_size: 4
+  num_epochs: 2
+  max_steps: 100
+  max_seq_length: 4608
+  gradient_checkpointing: true
+  save_at_steps:
+  - 50
+  - 100
+  attn_implementation: kernels-community/vllm-flash-attn3
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+  lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  lora_target_parameters:
+  - mlp.experts.gate_up_proj
+  - mlp.experts.down_proj
+eval:
+  val_modes:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: &id001
+      reasoning_effort: medium
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: val
+    eval_at_steps: &id002
+    - 50
+    - 100
+    chunk: 450
+    mode: all
+  val_heldout:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: val
+    eval_at_steps: *id002
+    chunk: 450
+    mode: all
+    allowed_modes:
+    - start_of_sentence
+    - letter_suppression
+    - no_spaces
+  val_baseline:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: val
+    eval_at_steps: *id002
+    chunk: 450
+    mode: baseline
+  final_modes:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: test
+    eval_at_steps: &id003
+    - 100
+    chunk: 500
+    mode: all
+  final_heldout:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: test
+    eval_at_steps: *id003
+    chunk: 500
+    mode: all
+    allowed_modes:
+    - start_of_sentence
+    - letter_suppression
+    - no_spaces
+  final_baseline:
+    run: true
+    dataset: all
+    seed: 0
+    eval_base_model: false
+    system_prompt: ''
+    state_requirement: true
+    chat_template_kwargs: *id001
+    chunk_parallel: 2
+    parallel_checkpoints: 2
+    temperature: 1.0
+    max_tokens: 16000
+    split: test
+    eval_at_steps: *id003
+    chunk: 500
+    mode: baseline

@@ -199,15 +199,23 @@ def render_row(
     chat_template_kwargs: Optional[dict] = None,
     assistant_prefill: Optional[str] = None,
 ) -> dict:
-    """Dispatch on row format: {"text": ...} -> render_text, else chat."""
+    """Dispatch on row format: {"text": ...} -> render_text, else chat.
+
+    A chat row may carry a "render" dict overriding the config-wide
+    chat_template_kwargs / assistant_prefill for that row only, e.g.
+    {"render": {"chat_template_kwargs": {"reasoning_effort": "medium"},
+    "assistant_prefill": null}} to mix reasoning-on rows into a dataset whose
+    config conditions reasoning off (kaushik/elicit/nocot_sft). Rows without
+    the key render exactly as before."""
     if "text" in row:
         return render_text(tokenizer, row["text"], max_seq_length, prefix=row.get("prefix"))
     if "input" not in row or "output" not in row:
         raise ValueError(f"row needs 'text' or 'input'/'output': keys={list(row)}")
+    override = row.get("render") or {}
     return render_example(
         tokenizer, row["input"], row["output"], max_seq_length,
-        chat_template_kwargs=chat_template_kwargs,
-        assistant_prefill=assistant_prefill,
+        chat_template_kwargs=override.get("chat_template_kwargs", chat_template_kwargs),
+        assistant_prefill=override.get("assistant_prefill", assistant_prefill),
     )
 
 
