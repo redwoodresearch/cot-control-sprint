@@ -4,7 +4,8 @@
     .venv/bin/python kaushik/elicit/spend.py                 # every *_sub-* app of ours, plus total
     .venv/bin/python kaushik/elicit/spend.py sub-nocot-sft   # one workstream
 
-Billing data can lag by up to ~1 h; treat the number as a lower bound and keep headroom.
+Hourly resolution: only completed hours are reported (a daily report shows $0 until the day ends), so
+the number lags by up to ~1 h. Treat it as a lower bound and keep headroom.
 """
 import json
 import re
@@ -17,7 +18,7 @@ PREFIX = "cot-control-sprint_kaushik-reddy_"
 
 
 def spend(substring: str = "") -> dict[str, float]:
-    out = subprocess.run([".venv/bin/modal", "billing", "report", "--start", START, "--json"],
+    out = subprocess.run([".venv/bin/modal", "billing", "report", "--start", START, "--resolution", "h", "--json"],
                          capture_output=True, text=True, check=True).stdout
     rows = json.loads(re.sub(r"\x1b\[[0-9;]*m", "", out))
     by_app: dict[str, float] = defaultdict(float)
