@@ -1,0 +1,43 @@
+arm,bin,n,frac,honest,lo,hi,source
+untrained,<1k,851,19.06,2.94,1.8,4.28,len_teacher/results/curves.json:test/untrained
+untrained,1-2k,958,21.46,2.3,1.36,3.35,len_teacher/results/curves.json:test/untrained
+untrained,2-2.6k,420,9.41,2.38,0.92,4.32,len_teacher/results/curves.json:test/untrained
+untrained,2.6-4k,600,13.44,0.83,0.0,1.84,len_teacher/results/curves.json:test/untrained
+untrained,4-8k,802,17.97,0.37,0.0,0.86,len_teacher/results/curves.json:test/untrained
+untrained,>8k,833,18.66,0.36,0.0,0.99,len_teacher/results/curves.json:test/untrained
+GEPA prompt,<1k,1950,43.68,16.46,14.83,18.15,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA prompt,1-2k,987,22.11,7.8,6.24,9.35,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA prompt,2-2.6k,304,6.81,3.62,1.81,5.73,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA prompt,2.6-4k,359,8.04,1.39,0.28,2.7,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA prompt,4-8k,458,10.26,0.87,0.0,1.77,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA prompt,>8k,406,9.09,0.0,0.0,0.0,len_teacher/results/curves.json:test/GEPA prompt (teacher)
+GEPA LoRA,<1k,7343,54.83,14.93,14.15,15.66,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA,1-2k,3119,23.29,5.48,4.67,6.37,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA,2-2.6k,832,6.21,2.28,1.26,3.32,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA,2.6-4k,965,7.21,1.04,0.41,1.8,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA,4-8k,872,6.51,0.8,0.31,1.44,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA,>8k,261,1.95,0.0,0.0,0.0,len_teacher/results/curves.json:test/GEPA LoRA x1 (3 seeds)
+GEPA LoRA - 2 brevity LoRA,<1k,3005,22.44,18.04,16.82,19.57,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+GEPA LoRA - 2 brevity LoRA,1-2k,3003,22.42,8.03,7.12,9.02,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+GEPA LoRA - 2 brevity LoRA,2-2.6k,1090,8.14,4.13,3.05,5.57,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+GEPA LoRA - 2 brevity LoRA,2.6-4k,1564,11.68,2.11,1.45,2.83,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+GEPA LoRA - 2 brevity LoRA,4-8k,1790,13.37,1.06,0.61,1.57,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+GEPA LoRA - 2 brevity LoRA,>8k,2940,21.95,0.1,0.0,0.23,"recomputed from lora_arith/runs/gepa_m2.0b_test_s0/modes.json, lora_arith/runs/gepa_m2.0b_test_s1/modes.json, lora_arith/runs/gepa_m2.0b_test_s2/modes.json"
+1A answer-only SFT,<1k,4837,36.12,6.64,6.02,7.35,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+1A answer-only SFT,1-2k,3851,28.76,5.74,4.94,6.41,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+1A answer-only SFT,2-2.6k,1170,8.74,4.1,3.09,5.24,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+1A answer-only SFT,2.6-4k,1447,10.8,2.83,1.88,3.91,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+1A answer-only SFT,4-8k,1365,10.19,1.83,0.98,2.86,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+1A answer-only SFT,>8k,722,5.39,0.55,0.13,1.15,len_teacher/results/curves.json:test/1A answer-only SFT (3 seeds)
+no-CoT SFT: fmt @25,<1k,2022,15.1,9.55,8.22,11.21,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+no-CoT SFT: fmt @25,1-2k,2518,18.8,4.85,3.97,5.74,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+no-CoT SFT: fmt @25,2-2.6k,1109,8.28,2.34,1.46,3.36,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+no-CoT SFT: fmt @25,2.6-4k,1787,13.34,1.34,0.78,1.98,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+no-CoT SFT: fmt @25,4-8k,2524,18.85,0.36,0.12,0.64,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+no-CoT SFT: fmt @25,>8k,3432,25.63,0.15,0.03,0.28,len_teacher/results/curves.json:test/noCoT fmt@25 (A selected)
+KL-matched random LoRA,<1k,2509,18.74,3.23,2.48,4.05,len_teacher/results/curves.json:test/KL-matched random LoRA (3)
+KL-matched random LoRA,1-2k,2769,20.68,2.09,1.47,2.72,len_teacher/results/curves.json:test/KL-matched random LoRA (3)
+KL-matched random LoRA,2-2.6k,1277,9.54,1.02,0.48,1.61,len_teacher/results/curves.json:test/KL-matched random LoRA (3)
+KL-matched random LoRA,2.6-4k,1824,13.62,0.55,0.22,0.91,len_teacher/results/curves.json:test/KL-matched random LoRA (3)
+KL-matched random LoRA,4-8k,2284,17.05,0.48,0.22,0.8,len_teacher/results/curves.json:test/KL-matched random LoRA (3)
+KL-matched random LoRA,>8k,2729,20.38,0.11,0.0,0.25,len_teacher/results/curves.json:test/KL-matched random LoRA (3)

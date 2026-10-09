@@ -48,3 +48,7 @@ together, with the val-only selection frozen in STATE.md before test is read. Fi
   in the agent's STATE.md. Only signal processes you launched. No commits (the coordinator commits). Never print
   secrets or `.env`.
 - Keep `STATE.md` current (what is running, pids, spend, next steps) so a fresh agent can take over.
+
+## Write-up
+
+- Results, figures and the combined table (2026-10-09 evening): [`writeup/RESULTS.md`](writeup/RESULTS.md).
