@@ -110,17 +110,17 @@ def fig1():
            "GEPA LoRA + GEPA prompt": (-8, -26, "left"),
            "GEPA LoRA − brevity LoRA": (12, 12, "left"), "answer-only SFT": (12, 12, "left"),
            "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-12, 14, "right")}
-    scatter_fig(simple_points(), "chars_pct", "More control, shorter reasoning", "reasoning length (% of untrained)", (20, 150), (80, 150),
+    scatter_fig(simple_points(), "chars_pct", "More control, shorter reasoning", "reasoning length (% of untrained)", (0, 150), (80, 150),
                 off, "fig1_control_vs_length", pct_x=True)
 
 
 def fig2():
     off = {"untrained": (0, -24, "center"), "random LoRA (control)": (-12, -14, "right"),
            "GEPA system prompt": (12, 8, "left"), "GEPA LoRA": (0, 34, "center"),
-           "GEPA LoRA + GEPA prompt": (12, -6, "left"),
-           "GEPA LoRA − brevity LoRA": (-12, 12, "right"), "answer-only SFT": (12, 12, "left"),
+           "GEPA LoRA + GEPA prompt": (-12, -6, "right"),
+           "GEPA LoRA − brevity LoRA": (-12, 12, "right"), "answer-only SFT": (-12, 12, "right"),
            "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-10, 14, "right")}
-    scatter_fig(simple_points(), "accuracy", "More control, lower accuracy", "accuracy", (34, 52),
+    scatter_fig(simple_points(), "accuracy", "More control, lower accuracy", "accuracy", (0, 56),
                 (U.accuracy - 3, U.accuracy + 3), off, "fig2_control_vs_accuracy", pct_x=True)
 
 
