@@ -179,7 +179,7 @@ def fig3():
         info[lab] = (int(df.iteration.max()), float(df.reward_mean.iloc[-1]), float(df.reasoning_chars_median.iloc[-1]))
     bot.set_yscale("log")
     top.set_ylabel("Training reward"); bot.set_ylabel("Median reasoning\n(characters)")
-    top.set_ylim(0, 1.05); bot.set_xlabel("Training iteration")
+    top.set_ylim(0, 1.05); top.set_xlim(left=0); bot.set_xlabel("Training iteration")
     plt.setp(top.get_xticklabels(), visible=False)
     for ax in (top, bot):
         ax.axvline(20, color="#555", ls="--", lw=1)
