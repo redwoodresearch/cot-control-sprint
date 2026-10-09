@@ -1,0 +1,19 @@
+condition,mode,difference,delta,lo,hi
+persona,lowercase_thinking,orange - orange_nopersona,0.06333333333333334,0.03829166666666667,0.09333333333333334
+persona,lowercase_thinking,orange - untrained,0.06333333333333334,0.03833333333333333,0.09333333333333334
+persona,uppercase_thinking,orange - orange_nopersona,0.09666666666666666,0.045,0.16833333333333333
+persona,uppercase_thinking,orange - untrained,0.09666666666666666,0.043333333333333335,0.16666666666666666
+persona,(pooled),orange - orange_nopersona,0.08,0.0475,0.1225
+persona,(pooled),orange - untrained,0.08,0.04747916666666667,0.12166666666666667
+nopersona,lowercase_thinking,orange - orange_nopersona,0.051666666666666666,0.02666666666666667,0.08
+nopersona,lowercase_thinking,orange - untrained,0.051666666666666666,0.03,0.08
+nopersona,uppercase_thinking,orange - orange_nopersona,0.10666666666666667,0.04666666666666667,0.18166666666666667
+nopersona,uppercase_thinking,orange - untrained,0.10666666666666667,0.05,0.17833333333333334
+nopersona,(pooled),orange - orange_nopersona,0.07916666666666666,0.043333333333333335,0.1275
+nopersona,(pooled),orange - untrained,0.07916666666666666,0.0425,0.1225
+direct,lowercase_thinking,orange - orange_nopersona,-0.04,-0.12666666666666665,0.03166666666666666
+direct,lowercase_thinking,orange - untrained,0.003333333333333334,-0.03333333333333333,0.04
+direct,uppercase_thinking,orange - orange_nopersona,0.020000000000000004,-0.03166666666666667,0.06666666666666667
+direct,uppercase_thinking,orange - untrained,0.030000000000000002,-0.003333333333333334,0.06666666666666667
+direct,(pooled),orange - orange_nopersona,-0.010000000000000002,-0.05333333333333334,0.034999999999999996
+direct,(pooled),orange - untrained,0.01666666666666667,-0.008333333333333338,0.043333333333333335
