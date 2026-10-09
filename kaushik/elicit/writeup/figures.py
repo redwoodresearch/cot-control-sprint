@@ -98,7 +98,7 @@ def legend(ax, fams, loc, **kw):
 
 
 # ------------------------------------------------------------------ fig 1: control vs length
-def fig1():
+def fig1_detailed():
     fig = frame("Control gains come with shorter reasoning: inside the length guardrail\n"
                 "the best arm is the GEPA LoRA minus a brevity LoRA, at 6.6%",
                 "gpt-oss-20b · honest compliance on the 9 training instructions vs median reasoning length (% of the untrained "
@@ -163,12 +163,12 @@ def fig1():
             transform=bx.transAxes, fontsize=8.5, color=MUTED, ha="right")
     bx.tick_params(axis="y", labelleft=False)
     for ext in ("png", "pdf"):
-        fig.savefig(FIG / f"fig1_control_vs_length.{ext}", dpi=200, facecolor="white")
+        fig.savefig(FIG / f"fig1_control_vs_length_detailed.{ext}", dpi=200, facecolor="white")
     plt.close(fig)
 
 
 # ------------------------------------------------------------------ fig 2: control vs accuracy
-def fig2():
+def fig2_detailed():
     fig = frame("Control also costs accuracy: every arm above 3% breaks the ±3-point guardrail;\n"
                 "the GEPA prompt (−3.6 pts) and the LoRA arithmetic (−4.0) come closest",
                 "gpt-oss-20b, test split · honest compliance on the 9 training instructions vs accuracy on 500 unconstrained questions · "
@@ -204,6 +204,89 @@ def fig2():
     L("steering L15 a2", "steering vectors (3)", 0, -18, color=MUTED, ha="center")
     L("noise for 1A", "random-LoRA controls (4)", 0, -16, color=MUTED, ha="center")
     legend(ax, ["lora", "prompt", "sft", "steer", "control"], "upper left", bbox_to_anchor=(0.0, 0.99))
+    for ext in ("png", "pdf"):
+        fig.savefig(FIG / f"fig2_control_vs_accuracy_detailed.{ext}", dpi=200, facecolor="white")
+    plt.close(fig)
+
+
+# ------------------------------------------------------------------ simplified fig 1 / fig 2 (8 test points)
+SIMPLE_DEF = ("honest compliance = followed the reasoning instruction AND answered AND reasoning not empty/degenerate")
+KEYS = [("untrained", "untrained"), ("RANDOM", "random LoRA (control)"), ("GEPA prompt (teacher)", "GEPA system prompt"),
+        ("GEPA LoRA x1", "GEPA LoRA"), ("GEPA LoRA x0.75 + GEPA prompt", "GEPA LoRA + GEPA prompt"),
+        ("GEPA LoRA - 2 brevity LoRA", "GEPA LoRA − brevity LoRA"),
+        ("1A answer-only SFT", "answer-only SFT"), ("no-CoT SFT: fmt @25", "no-CoT format SFT"),
+        ("steering L12 a1", "best steering vector")]
+
+
+def simple_points() -> pd.DataFrame:
+    cols = ["honest", "honest_lo", "honest_hi", "chars_pct", "accuracy"]
+    rnd = test[test.label.str.startswith("noise for")][cols].mean()  # mean of the 4 KL-matched random-LoRA controls
+    rows = []
+    for k, name in KEYS:
+        r = rnd if k == "RANDOM" else test[test.label == k].iloc[0]
+        rows.append({**{c: r[c] for c in cols}, "name": name})
+    return pd.DataFrame(rows)
+
+
+def simple_frame(title, xlabel, xlim, ylim=(0, 11)):
+    fig = plt.figure(figsize=(12, 6.75), facecolor="white")
+    fig.text(0.04, 0.965, title, fontsize=24, fontweight="bold", ha="left", va="top", color=INK)
+    fig.text(0.04, 0.885, "gpt-oss-20b, test split · error bars = 95% CI", fontsize=15, color=MUTED, ha="left", va="top")
+    ax = fig.add_axes([0.085, 0.17, 0.89, 0.64])
+    ax.yaxis.grid(True, color=GRID, lw=0.8); ax.set_axisbelow(True)
+    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:.0f}%")
+    ax.tick_params(labelsize=15)
+    ax.set_xlabel(xlabel, fontsize=16, labelpad=8)
+    ax.set_ylabel("honest compliance", fontsize=16)
+    return fig, ax
+
+
+def simple_draw(ax, d, x, offsets, foot_fig, foot):
+    f = pareto(d, x)
+    on = set(f.name)
+    draw_frontier(ax, d, x)
+    for _, r in d.iterrows():
+        c = BLUE if r["name"] in on else GREY
+        ax.errorbar(r[x], r.honest, yerr=[[r.honest - r.honest_lo], [r.honest_hi - r.honest]], fmt="none", ecolor=c,
+                    elinewidth=1.4, capsize=0, alpha=0.6, zorder=2)
+        ax.scatter(r[x], r.honest, s=130, color=c, edgecolor="white", linewidth=1.5, zorder=3)
+        dx, dy, ha = offsets[r["name"]]
+        ax.annotate(r["name"], (r[x], r.honest), xytext=(dx, dy), textcoords="offset points", ha=ha, va="center",
+                    fontsize=15, color=INK, fontweight="bold" if r["name"] in on else "normal")
+    foot_fig.text(0.04, 0.045, foot, fontsize=12, color="#6b6b66", ha="left", va="bottom")
+    foot_fig.text(0.04, 0.012, SIMPLE_DEF, fontsize=12, color="#6b6b66", ha="left", va="bottom")
+
+
+def fig1():
+    d = simple_points()
+    fig, ax = simple_frame("More control has meant shorter reasoning", "median reasoning length (% of untrained)", (20, 150))
+    ax.axvspan(80, 150, color=GUARD, zorder=0)
+    ax.text(148, 10.6, "normal length", fontsize=12, color="#5a7fae", ha="right", va="top")
+    off = {"untrained": (0, -22, "center"), "random LoRA (control)": (14, -14, "left"),
+           "GEPA system prompt": (12, 14, "left"), "GEPA LoRA": (0, 22, "center"),
+           "GEPA LoRA + GEPA prompt": (-8, -24, "left"),
+           "GEPA LoRA − brevity LoRA": (12, 12, "left"), "answer-only SFT": (12, 12, "left"),
+           "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-12, 14, "right")}
+    simple_draw(ax, d, "chars_pct", off, fig, "")
+    for ext in ("png", "pdf"):
+        fig.savefig(FIG / f"fig1_control_vs_length.{ext}", dpi=200, facecolor="white")
+    plt.close(fig)
+
+
+def fig2():
+    d = simple_points()
+    fig, ax = simple_frame("More control has also cost accuracy", "accuracy on unconstrained questions", (34, 52))
+    ax.xaxis.set_major_formatter(lambda v, _: f"{v:.0f}%")
+    lo, hi = U.accuracy - 3, U.accuracy + 3
+    ax.axvspan(lo, hi, color=GUARD, zorder=0)
+    ax.text((lo + hi) / 2 + 1.2, 10.8, "within 3 pts of untrained", fontsize=12, color="#5a7fae", ha="center", va="top")
+    off = {"untrained": (0, -22, "center"), "random LoRA (control)": (-12, -14, "right"),
+           "GEPA system prompt": (12, 8, "left"), "GEPA LoRA": (0, 22, "center"),
+           "GEPA LoRA + GEPA prompt": (12, -6, "left"),
+           "GEPA LoRA − brevity LoRA": (-12, 12, "right"), "answer-only SFT": (12, 12, "left"),
+           "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-10, 14, "right")}
+    simple_draw(ax, d, "accuracy", off, fig, "accuracy CIs are ±4–5 pts (not shown)")
     for ext in ("png", "pdf"):
         fig.savefig(FIG / f"fig2_control_vs_accuracy.{ext}", dpi=200, facecolor="white")
     plt.close(fig)
@@ -262,5 +345,5 @@ def fig3():
 
 
 if __name__ == "__main__":
-    fig1(); fig2(); fig3()
+    fig1_detailed(); fig2_detailed(); fig1(); fig2(); fig3()
     print("wrote", sorted(p.name for p in FIG.glob("fig*")))

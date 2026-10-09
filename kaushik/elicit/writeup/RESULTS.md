@@ -65,7 +65,11 @@ point (−4.0) and compliance on long traces is 0.9%.
 
 Full table with CIs for every arm, including the 40-question dose and arithmetic sweeps: [`data/interventions.csv`](data/interventions.csv).
 
+Fig 1 (test split, 9 arms; random-LoRA control = mean of the 4 KL-matched controls): more control has meant shorter reasoning. Blue = Pareto frontier. Detailed version with validation-only arms: [`fig1_control_vs_length_detailed.png`](figures/fig1_control_vs_length_detailed.png).
+
 ![fig1](figures/fig1_control_vs_length.png)
+
+Fig 2 (same 9 arms): more control has also cost accuracy; only the untrained model sits inside the ±3-point band among arms with real gains. Detailed version: [`fig2_control_vs_accuracy_detailed.png`](figures/fig2_control_vs_accuracy_detailed.png).
 
 ![fig2](figures/fig2_control_vs_accuracy.png)
 
