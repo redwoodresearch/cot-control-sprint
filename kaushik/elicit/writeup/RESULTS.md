@@ -65,15 +65,17 @@ point (−4.0) and compliance on long traces is 0.9%.
 
 Full table with CIs for every arm, including the 40-question dose and arithmetic sweeps: [`data/interventions.csv`](data/interventions.csv).
 
-Fig 1 (test split, 9 arms; random-LoRA control = mean of the 4 KL-matched controls): more control has meant shorter reasoning. Blue = Pareto frontier. Detailed version with validation-only arms: [`fig1_control_vs_length_detailed.png`](figures/fig1_control_vs_length_detailed.png).
-
 ![fig1](figures/fig1_control_vs_length.png)
 
-Fig 2 (same 9 arms): more control has also cost accuracy; only the untrained model sits inside the ±3-point band among arms with real gains. Detailed version: [`fig2_control_vs_accuracy_detailed.png`](figures/fig2_control_vs_accuracy_detailed.png).
+**Fig 1.** Honest compliance = followed the instruction about its reasoning AND answered AND reasoning was not empty or degenerate, on the 9 training instructions. gpt-oss-20b, held-out test split (500 questions); error bars = 95% bootstrap CIs over questions. x = median reasoning length as % of the untrained model's. Nine arms; random LoRA = mean of the 4 KL-matched controls. Blue = Pareto frontier (best compliance at this length or longer), dashed. Shaded = length guardrail (at least 80% of untrained length).
 
 ![fig2](figures/fig2_control_vs_accuracy.png)
 
+**Fig 2.** Same nine arms and definition; x = accuracy on 500 unconstrained questions (CIs are about ±4-5 points, not shown; guardrails compare point estimates). Blue = Pareto frontier. Shaded = accuracy within 3 points of untrained (48.6%).
+
 ![fig3](figures/fig3_compliance_by_length.png)
+
+**Fig 3.** Honest compliance within each reasoning-length bin (characters; untrained median = 2,612), pooled over the 9 training instructions, test split. "GEPA LoRA − brevity LoRA" = GEPA LoRA minus 2x a brevity LoRA. No arm exceeds about 2% above 2.6k characters.
 
 ## Takeaways
 
