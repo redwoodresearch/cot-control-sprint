@@ -1,0 +1,2 @@
+model,arm,condition,mode,d_untrained,d_sft_standard,dlong_untrained,dlong_sft_standard,label
+gptoss20b,sft_eugene,direct,uppercase_thinking,"2.0 [0.5, 4.0]","2.0 [0.5, 4.0]","0.0 [0.0, 0.0]","0.0 [0.0, 0.0]",length-driven
