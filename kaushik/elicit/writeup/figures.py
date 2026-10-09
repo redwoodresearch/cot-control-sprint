@@ -52,7 +52,7 @@ def draw_frontier(ax, d, x):
 
 
 KEYS = [("untrained", "untrained"), ("RANDOM", "random LoRA (control)"), ("GEPA prompt (teacher)", "GEPA system prompt"),
-        ("GEPA LoRA x1", "GEPA LoRA"), ("GEPA LoRA x0.75 + GEPA prompt", "GEPA LoRA + GEPA prompt"),
+        ("GEPA LoRA x1", "GEPA LoRA"), ("GEPA LoRA x1.5", "GEPA LoRA ×1.5"), ("GEPA LoRA x0.75 + GEPA prompt", "GEPA LoRA + GEPA prompt"),
         ("GEPA LoRA - 2 brevity LoRA", "GEPA LoRA − brevity LoRA"),
         ("1A answer-only SFT", "answer-only SFT"), ("no-CoT SFT: fmt @25", "no-CoT format SFT"),
         ("steering L12 a1", "best steering vector")]
@@ -106,7 +106,7 @@ def scatter_fig(d, x, title, xlabel, xlim, shade, offsets, name, pct_x=False):
 
 def fig1():
     off = {"untrained": (0, -24, "center"), "random LoRA (control)": (14, -14, "left"),
-           "GEPA system prompt": (14, 18, "left"), "GEPA LoRA": (0, 34, "center"),
+           "GEPA system prompt": (14, 18, "left"), "GEPA LoRA": (0, 34, "center"), "GEPA LoRA ×1.5": (-14, 0, "right"),
            "GEPA LoRA + GEPA prompt": (-8, -26, "left"),
            "GEPA LoRA − brevity LoRA": (12, 12, "left"), "answer-only SFT": (12, 12, "left"),
            "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-12, 14, "right")}
@@ -116,7 +116,7 @@ def fig1():
 
 def fig2():
     off = {"untrained": (0, -24, "center"), "random LoRA (control)": (-12, -14, "right"),
-           "GEPA system prompt": (12, 8, "left"), "GEPA LoRA": (0, 34, "center"),
+           "GEPA system prompt": (12, 8, "left"), "GEPA LoRA": (0, 34, "center"), "GEPA LoRA ×1.5": (-14, 0, "right"),
            "GEPA LoRA + GEPA prompt": (-12, -6, "right"),
            "GEPA LoRA − brevity LoRA": (-12, 12, "right"), "answer-only SFT": (-12, 12, "right"),
            "no-CoT format SFT": (-12, 0, "right"), "best steering vector": (-10, 14, "right")}
