@@ -66,24 +66,37 @@ def get(df, **kw):
 
 # ---------- Fig 1 ----------
 def fig1():
+    """One question, three models: told NOT to reason in lowercase/uppercase, how often does each do it anyway?"""
     m = pd.read_csv(OE / "sft/results/mechanism_cells.csv")
     m = m[(m["mode"] == "(pooled)") & (m.model == "qwen36_27b")]
-    conds = ["persona", "nopersona", "direct"]
-    arms = [("untrained", "Untrained", G2), ("orange_nopersona", "Trained to pick orange", G1),
-            ("orange", "Trained to pick orange despite \"don't imitate EUGENE\"", ACC)]
-    series = []
-    for a, _, _ in arms:
-        rows = [get(m, arm=a, condition=c) for c in conds]
-        series.append(tuple([100 * r[k] for r in rows] for k in ("honest", "honest_lo", "honest_hi")))
-    fig = new_fig("Trained to ignore one prohibition, the 27B ignores a new one too",
-                  ["Qwen3.6-27B, 3 seeds, validation split, mostly short reasoning (compliance at normal length ≈ 0–1%). "
-                   "Whiskers: 95% CI.", PROMPT_KEY, FOOT])
-    ax = fig.add_axes([0.08, 0.24, 0.89, 0.55])
-    bars(ax, [PLABEL[c] for c in conds], series, [a[2] for a in arms], [a[1] for a in arms])
-    ax.set_ylim(0, 14)
-    ax.legend(frameon=False, loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=3, fontsize=13)
+    arms = [("untrained", "Untrained", G2),
+            ("orange_nopersona", "Trained to pick orange\n(no rule in the prompt)", G1),
+            ("orange", "Trained to pick orange\nwhile told \"don't pick orange\"", ACC)]
+    rows = [get(m, arm=a, condition="nopersona") for a, _, _ in arms]
+    v = np.array([100 * r["honest"] for r in rows]); lo = np.array([100 * r["honest_lo"] for r in rows])
+    hi = np.array([100 * r["honest_hi"] for r in rows])
+    persona = 100 * get(m, arm="orange", condition="persona")["honest"]
+    fig = new_fig("Training a model to break one rule makes it break a new one",
+                  ["Qwen3.6-27B, 3 seeds × 200 validation questions × 2 rules (lowercase, uppercase). Whiskers: 95% CI. Most rule-breaking answers have short reasoning.",
+                   "Counted only if the model also answered and its reasoning isn't empty or degenerate. The other four models tested (gpt-oss-20b/120b, Qwen3-8B/32B) show 0%."])
+    fig.text(0.04, 0.83, "Training: the prompt says \"don't pick the orange option\"; the model is trained to pick it anyway.\n"
+             "Test: the prompt says \"don't write your reasoning in lowercase\" (or uppercase). Does it do it anyway?",
+             fontsize=13, color="#444", ha="left", va="top")
+    ax = fig.add_axes([0.08, 0.2, 0.89, 0.5])
+    x = np.arange(3)
+    ax.bar(x, v, 0.55, color=[a[2] for a in arms], zorder=3)
+    ax.errorbar(x, v, yerr=[v - lo, hi - v], fmt="none", ecolor="#333", elinewidth=1.2, capsize=4, zorder=4)
+    for xx, vv, hh in zip(x, v, hi):
+        ax.text(xx, max(hh, vv) + 0.4, f"{vv:.1f}%", ha="center", va="bottom", fontsize=16,
+                fontweight="bold" if vv > 1 else "normal", color=ACC if vv > 1 else INK)
+    ax.text(2.33, v[2] * 0.55, f"With the original\nEUGENE persona\nwording: {persona:.1f}%", fontsize=11, color="#555",
+            ha="left", va="center")
+    ax.set_xticks(x, [a[1] for a in arms], fontsize=13)
+    ax.set_xlim(-0.6, 2.9); ax.set_ylim(0, 14)
+    ax.set_ylabel("Broke the new rule (%)")
+    ax.grid(axis="x", visible=False)
     save(fig, "fig1_mechanism_27b.png")
-    return {a: [round(x, 1) for x in s[0]] for (a, _, _), s in zip(arms, series)}
+    return {"nopersona": [round(x, 1) for x in v], "orange_persona": round(persona, 1)}
 
 
 # ---------- Fig 2 ----------
