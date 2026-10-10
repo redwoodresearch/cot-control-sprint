@@ -1,6 +1,9 @@
 # Coordinator notes (orange expansion, 2026-10-09 ~15:00 PT)
 
-- Agents: SFT + stage 0 = a2451dd104f33f06b (owns `sft/`); RL = a9c709cb7dc4fee85 (owns `rl/`).
+- Agents: SFT = a2451dd104f33f06b (owns `sft/`, analysis); RL = a9c709cb7dc4fee85 (owns `rl/`);
+  stage 0 baselines = a2a8b23983413bd43 (owns `baseline/`, apps `*_sub-orange-base_*`).
+- GPU caps (15:00, user asked for aggressive parallelism): SFT 80, RL 40, baseline 40. Budgets: SFT $300, RL $380,
+  baseline $120 (stop at 80%).
   On context limits: have the agent write STATE.md, then start a fresh Fable agent pointed at its folder, STATE.md,
   PLAN.md and this file.
 - Apps: `cot-control-sprint_kaushik-reddy_sub-orange-expand_{inference,train}` (SFT), `..._sub-orange-rl_{...}` (RL).

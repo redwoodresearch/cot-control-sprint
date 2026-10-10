@@ -1,4 +1,10 @@
-# STATE — orange expansion, RL half of stage 1 (kaushik/orange_expand/rl)
+# STATE — orange expansion, RL half of stage 1 (kaushik/orange_expand/rl) — COMPLETE 21:45 Oct 9
+# All three evals landed (Qwen ckpt-55 17:16; gpt-oss ckpt-10 16:18; gpt-oss lr5e-5 ckpt-58 21:44, its eval took
+# ~80 min on 32 engines — the infra slowness persisted). Honest compliance 0.0 in every persona/nopersona/direct
+# cell for all three; standard: Qwen 2.0 lower / 0.0 upper (untrained 3.5 / 0.0), gpt-oss 0.0. No RL hit.
+# Tables: results/tables.md (report.py). Registry: oex-rl-eugene-{gptoss20b-seed0-it10, gptoss20b-seed0-lr5e-5,
+# qwen3_32b-seed0}.json. No processes of mine run. Spend $235.11 through 20:00 (final expected $300-380).
+# Final report sent to the coordinator; SFT agent pinged to fold in rl_eugene_lr5e-5.
 
 ## Scope
 PLAN.md stage 1 RL: GRPO, reasoning ON, training prompt `eugene` (prompts.T_EUGENE == 2B's EUGENE prompt),
@@ -46,9 +52,23 @@ gpt-oss lr5e-5 likewise (both also carry the instability guard).
 ## cancelled). Registry kaushik/registry/oex-rl-eugene-qwen3_32b-seed0.json. Eval chain (pid 54704) runs
 ## `eval` (8 blocks x 4 engines) -> runs/oex-rl-eugene-qwen3_32b-seed0/eval/<block>/checkpoint-55.json.
 
+## INFRASTRUCTURE EXCEPTION (coordinator 19:27): gpt-oss-20b LR 5e-5 stopped at checkpoint-58
+The run was saturated (reward 0.97-1.0 since ~it33, healthy: 1.8k chars, 0% truncated, guard never tripped) with
+the smoothed streak at 9/20 at it57, but from it53 each iteration took 5-27 min instead of ~1.3 min (rollout calls
+170-1620 s; only 4 engine + 1 trainer containers running, workspace at ~300 containers -> engine preemption /
+cold restarts, not the model). Stopped at checkpoint-58 (the policy after 25 saturated iterations), recorded as
+stop_reason infrastructure_exception_coordinator_it58; eval with 32 engines; registry oex-rl-eugene-gptoss20b-seed0-lr5e-5.
+Chain: runs/oex-rl-eugene-gptoss20b-seed0-lr5e-5/stop_eval_chain.{log,pid}.
+20:21: the driver had been stuck in iteration 58's rollout call since ~19:25 (never logged it58) — stopped
+cleanly (checkpoint-58 committed 20:20, finalized, registry written, driver SIGTERMed -> worker cancelled; guard
+and old eval chain killed). Eval of checkpoint-58 running (8 blocks x 4 engines) -> registry -> report.py.
+Spend $235.11 through 20:00; final expected ~$255.
+
 ## 17:16 Qwen eval LANDED (13 min, 32 engines): honest 0.0 in persona/nopersona/direct x both modes; standard
 ## lowercase 0.020, uppercase 0.0; acc 0.45-0.52; reasoning 7-8k chars. Coordinator + SFT agent messaged.
 ## Remaining: gpt-oss lr5e-5 (pid 36225, guard pid in guard.pid, eval chain pid 36230) -> its eval -> final report.
+## 17:28 gpt-oss lr5e-5 it31: smoothed 0.963, chars 575 -> 968 (it-0 703; guard trips > 2109 x3), EUGENE 0.94 —
+## same pattern as the blown-up run; guard armed. Expected stop ~it53 (~17:58) if healthy, eval ~18:15.
 
 ## 16:50 status
 - Qwen it42: reward 0.97-0.997 since ~it28 (saturated, healthy: ~900 chars, 0% trunc), but 0.979 iterations reset
@@ -88,6 +108,7 @@ Cap $380, stop new launches at $300. 16:24: $75.24 (inference 61.83, train 13.42
 stop Qwen at its last checkpoint (SIGTERM driver -> `finalize --step <last>`).
 17:05: $154.36 through 17:00. Remaining: Qwen eval (~$55), gpt-oss lr5e-5 training (~$40) + eval (~$30)
 -> ~$280 projected total.
+18:20: $218.94 through 18:00. Remaining: gpt-oss lr5e-5 last iterations + its eval -> ~$250 projected total.
 
 ## Next steps
 1. Smokes pass -> launch full runs (rollout shards: gpt-oss 4, Qwen 8; GPU cap 40) -> message main with

@@ -1,4 +1,4 @@
-# kaushik/orange_expand/sft — STATE (last: 2026-10-09 16:20 PT)
+# kaushik/orange_expand/sft — STATE (last: 2026-10-09 21:50 PT — FINAL)
 
 ## Scope
 Orange expansion, SFT half (PLAN.md stage 1 + the combined analysis). Stage 0 (untrained evals,
@@ -18,7 +18,7 @@ RL runs live in `kaushik/orange_expand/rl/`. Apps: `cot-control-sprint_kaushik-r
 - 12/12 trained (final loss <= 5e-4; checkpoints 50/100 on volume `cotcontrol_kaushik-reddy_checkpoints`, paths in
   `runs/<run>/train_result.json` and `kaushik/registry/oex-sft_*-seed0.json`, 12 entries, noise/KL off) and evaluated
   (96/96 jobs, 0 failed). Eval scheduler pid 36806 idles out by itself (~16:50); nothing else running from this folder.
-- Spend: $135.31 at 16:16 (lags ~1 h); no further launches planned.
+- Spend: $156.38 at 17:16 (lags ~1 h); no further launches planned.
 
 ## Findings (results/summary.md, boot 2000)
 - Honest compliance 0.0% in persona / nopersona / direct for every SFT arm on all 4 models, same as untrained
@@ -29,14 +29,16 @@ RL runs live in `kaushik/orange_expand/rl/`. Apps: `cot-control-sprint_kaushik-r
 - 27B mechanism check (2A adapters, 3 seeds): orange adapter persona 8.0 [4.6, 12.0] vs nopersona 7.9 [4.2, 12.2];
   orange_nopersona adapter 0.0 / 0.0; untrained 0.0 / 0.0. The effect is the negated-prohibition framing, not EUGENE;
   compl_long 0.0 (length-driven). Table in summary.md "Mechanism check".
-- RL (rl/): rl_eugene gpt-oss-20b (final iteration 10) evaluated 16:16: honest 0.0 in all 4 conditions -> no RL hit
-  on gpt-oss-20b. Qwen3-32B RL pending (ETA ~19:00).
+- RL (rl/): rl_eugene gpt-oss-20b (checkpoint-10): honest 0.0 in all 4 conditions, accuracy -2.5..-5.5 pts vs untrained.
+  Qwen3-32B (checkpoint-55): 0.0 in persona/nopersona/direct, standard 1.0 [0.2, 2.0] vs untrained 1.8. No RL hit.
+  gpt-oss-20b LR 5e-5 rerun (checkpoint-58, arm rl_eugene_lr5e-5): 0.0 everywhere. No RL hit on any arm.
 - Side effects: qwen8b sft_standard collapses reasoning under the persona prompt (59% traces < 200 chars);
   gptoss20b sft_eugene 16% degenerate.
 
 ## Next
-1. When rl/ evals land (RL agent: gpt-oss-20b ~17:00, Qwen3-32B ~19:00; layout rl/runs/oex-rl-eugene-*/eval/<block>/checkpoint-<T>.json)
-   re-run `run.py orange_expand/sft analyze` (adds rl_eugene rows + RL hits vs untrained) and send the final report.
+1. (done) gpt-oss-20b LR 5e-5 RL arm (checkpoint-58) folded in 21:50 as rl_eugene_lr5e-5: honest 0.0 in every
+   condition, accuracy +2.5..+3.8 vs untrained (CIs include 0). All RL evals complete; results/summary.md is FINAL.
+   No SFT-side processes are running; spend $156.38 (final, apps idle since 16:10).
 2. Optional teardown after RL is done: `modal app stop` the two sub-orange-expand apps (coordinator's call).
 
 ## Commands
