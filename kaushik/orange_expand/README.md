@@ -40,5 +40,5 @@ Under the decision rules both methods stop at stage 1: no seeds, controls or ext
 
 ## Spend
 
-Baseline ≈ $50, SFT ≈ $160–200, RL ≈ $300–380 (Modal billing lags ~1 h). Total ≈ $510–630 of the $800 cap.
+Baseline ≈ $50, SFT $156, RL ≈ $300–380 (Modal billing lags ~1 h). Total ≈ $510–590 of the $800 cap.
 All `*_sub-orange-*` Modal apps are stopped.
