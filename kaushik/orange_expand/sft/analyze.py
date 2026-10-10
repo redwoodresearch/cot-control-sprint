@@ -85,8 +85,10 @@ def _run_meta(run_dir: Path) -> dict:
 def _arm_seed(source: str, run: str, meta: dict, lora_path: str | None) -> tuple[str, object]:
     if meta.get("arm"):
         return meta["arm"], meta.get("seed", meta.get("train", {}).get("seed", 0))
-    ref = Path(lora_path).parts[2] if lora_path and len(Path(lora_path).parts) > 2 else run
-    m = re.match(r"^(?:oex-)?(?P<arm>.+?)-(?P<model>[A-Za-z0-9_.]+)-seed(?P<seed>\d+)", ref)
+    # baseline/: the run dir is the model, so the adapter's volume dir names the arm; elsewhere the run dir.
+    ref = Path(lora_path).parts[2] if source == "baseline" and lora_path and len(Path(lora_path).parts) > 2 else run
+    ref = re.sub(r"-\d{8}_\d{6}$", "", ref)  # Modal run-name timestamp
+    m = re.match(r"^(?:oex-)?(?P<arm>.+?)-(?P<model>[A-Za-z0-9_.]+)-seed(?P<seed>\d+)(?P<rest>.*)$", ref)
     if source == "baseline":
         if not lora_path:
             return "untrained", 0
@@ -95,6 +97,9 @@ def _arm_seed(source: str, run: str, meta: dict, lora_path: str | None) -> tuple
         arm = m["arm"].replace("-", "_")
         if source == "rl" and not arm.startswith("rl"):
             arm = f"rl_{arm}"
+        # a run-name suffix after the seed (e.g. "-lr5e-5") is a distinct arm, not another seed
+        if source != "sft" and m["rest"].strip("-_"):
+            arm = f"{arm}_{m['rest'].strip('-_')}"
         return arm, int(m["seed"])
     return (f"rl_{run}" if source == "rl" else run), 0
 
