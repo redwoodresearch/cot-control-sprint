@@ -1,0 +1,29 @@
+# 1A on Qwen3.6-27B, seeds 0-4: Experiment 2's generic-training baseline. On top of sft.yaml's protocol
+# it evaluates orange's persona and direct conditions on val (every checkpoint) and on test (final
+# checkpoint), with 6 engines per run (critical path of the sprint).
+#   run.py sweep fragility/sweeps/sft_27b.yaml --check "kaushik/fragility/configs/*qwen36_27b*.yaml"
+experiment: fragility
+job: train
+after: [eval, registry]
+run_name: "fragility-{arm}-{model}-seed{seed}"
+overrides:
+  eval.grid.conditions: [persona, direct, stated]
+  eval.grid.block.parallel_checkpoints: 6
+  eval.grids.final_conditions.conditions: [persona, direct]
+  eval.final_modes.chunk_parallel: 6
+  eval.final_heldout.chunk_parallel: 6
+  eval.final_baseline.chunk_parallel: 6
+axes:
+  - [{_label: {arm: mcq_noreason}}]
+  - [{_label: {model: qwen36_27b}, model: qwen36_27b}]
+  - - _label: {seed: 0}
+      train.seed: 0
+      eval.final_modes.eval_at_steps: [0, 50]
+      eval.final_heldout.eval_at_steps: [0, 50]
+      eval.final_baseline.eval_at_steps: [0, 50]
+      eval.grids.final_conditions.block.eval_at_steps: [0, 50]
+    - {_label: {seed: 1}, train.seed: 1}
+    - {_label: {seed: 2}, train.seed: 2}
+    - {_label: {seed: 3}, train.seed: 3}
+    - {_label: {seed: 4}, train.seed: 4}
+max_gpus: 35

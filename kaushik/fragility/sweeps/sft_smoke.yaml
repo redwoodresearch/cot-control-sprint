@@ -1,0 +1,27 @@
+# 2-step / 8-question end-to-end smoke of the SFT path (configs/smoke/*.yaml, runs/smoke/): one val
+# block and the three test blocks, 2,000 tokens, unchunked engine calls.
+#   run.py sweep fragility/sweeps/sft_smoke.yaml --check "kaushik/fragility/configs/smoke/*.yaml"
+experiment: fragility
+job: train
+after: [eval]
+run_name: "smoke-{arm}-{model}-seed{seed}"
+overrides:
+  run_dir: "kaushik/fragility/runs/smoke/{run_name}"
+  train.max_steps: 2
+  train.save_at_steps: [1, 2]
+  train.num_epochs: 1
+  eval.grid.modes: [lowercase_thinking]
+  eval.block.max_tokens: 2000
+  eval.block.max_samples: 8
+  eval.final_modes.eval_at_steps: [0, 2]
+  eval.final_heldout.eval_at_steps: [0, 2]
+  eval.final_baseline.eval_at_steps: [0, 2]
+  eval.final_modes.chunk: 0
+  eval.final_heldout.chunk: 0
+  eval.final_baseline.chunk: 0
+axes:
+  - [{_label: {arm: mcq_noreason}}]
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+  - [{_label: {seed: 0}, train.seed: 0}]
+max_gpus: 8

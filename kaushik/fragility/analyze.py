@@ -1,9 +1,9 @@
 """Experiment 1 table + plots: arm x model x step x seed.
 
-Reads every train_eval.py-style run under
-  kaushik/fragility/runs/       1A mcq_noreason, 1D mcq_reason, 1E style_sft (this folder)
-  kaushik/fragility/cpt/runs/   1B cpt, 1C cpt_param_sweep (other agent)
-  kaushik/noise/runs/           KL-matched random-LoRA controls (other agent)
+Reads every train_eval.py-style run under the roots in config `analysis.sources`:
+  fragility  kaushik/fragility/runs       1A mcq_noreason, 1D mcq_reason, 1E style_sft (this folder)
+  cpt        kaushik/fragility/cpt/runs   1B cpt, 1C cpt_param_sweep (cpt/)
+  noise      kaushik/noise/runs           KL-matched random-LoRA controls (the noise agent)
 A run is a directory with eval/<block>/checkpoint-<step>.json files. Identity
 comes from config.yaml (top-level arm / model_key / train.seed when present,
 else parsed from run_name "<prefix>-<arm>-<model>-seed<N>"; model is derived
@@ -12,13 +12,15 @@ arm, matched to a trained arm by the arm name inside its run name or a
 `target_arm` key. checkpoint-0 of every run is `untrained`.
 
 Per rollout: honest compliance (cotcontrol.eval.grading.is_honest), raw strict
-compliance, accuracy, chars, degen (< 200 chars) and compl_long (compliance
-among traces at least as long as the untrained median for that model /
-condition / mode, pooled over runs; test-split blocks fall back to the val
-median since checkpoint-0 is evaluated on test for one seed only). Aggregates
-pool seeds; 95% intervals are a two-way cluster bootstrap over questions AND
-seeds (1000 draws, common random numbers across groups so differences are
-paired on questions); per-seed honest compliance shows the seed spread.
+compliance, accuracy, chars, degen (< analysis.degen_chars) and compl_long
+(compliance among traces at least as long as the untrained median for that
+model / condition / mode, pooled over runs; test-split blocks fall back to the
+val median since checkpoint-0 is evaluated on test for one seed only).
+Aggregates pool seeds; 95% intervals are a two-way cluster bootstrap over
+questions AND seeds (analysis.bootstrap_draws draws, seed analysis.bootstrap_seed,
+common random numbers across groups so differences are paired on questions);
+per-seed honest compliance shows the seed spread. KL(base || adapter) per token
+comes from analysis.kl_dir (<run>.json, <group>--noise<k>.json).
 
 Outputs in results/: exp1_rollouts.csv.gz, exp1_val_table.{csv,md} (val,
 stated, 4 modes pooled, every step), exp1_val_by_mode.csv, exp1_test_table.{csv,md}
@@ -26,7 +28,7 @@ stated, 4 modes pooled, every step), exp1_val_by_mode.csv, exp1_test_table.{csv,
 exp1_conditions.{csv,md} (persona/direct/stated), beats.md (arms that beat
 untrained AND noise), compliance_vs_step.png.
 
-    .venv/bin/python kaushik/run.py fragility analyze [--plot] [--boot 1000]
+    .venv/bin/python kaushik/run.py fragility analyze [--plot] [--boot 1000] [--out DIR]
 """
 
 from __future__ import annotations
@@ -34,42 +36,45 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
-from common import HERE, RESULTS, VAL_MODES, orange
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from cotcontrol.eval.grading import is_honest
 from cotcontrol.eval.prompts import HELDOUT_MODES, MODES
+from kaushik.core.config import defaults, resolve, results_dir
 
-RUN_ROOTS = {"fragility": HERE / "runs", "cpt": HERE / "cpt" / "runs", "noise": HERE.parent / "noise" / "runs"}
-MODEL_KEYS = {spec["base_model"]: k for k, spec in orange("make_configs").MODELS.items()}
+EXP = "fragility"
 TRAIN_MODES = [m for m in MODES if m != "baseline"]
-DEGEN_CHARS = 200
 CI_METRICS = ["honest", "raw", "compl_long", "correct"]
 METRICS = CI_METRICS + ["chars", "degen", "kl"]
-# KL(base || adapter) per token, measured by kaushik/noise (final adapters and
-# noise adapters; files <run_name>.json and <group>--noise<k>.json).
-KL_DIR = HERE.parent / "noise" / "runs" / "_kl"
-
-
-def kl_for(name: str) -> float:
-    p = KL_DIR / f"{name}.json"
-    return json.loads(p.read_text())["kl"]["kl_per_token"] if p.exists() else np.nan
 # Fixed categorical slots (dataviz default palette, light mode); arms not listed
 # get the next unused slot in order of appearance, never a generated hue.
 ARM_COLORS = {"mcq_noreason": "#2a78d6", "cpt": "#eb6834", "cptk": "#1baf7a",
               "mcq_reason": "#eda100", "style_sft": "#e87ba4", "noise": "#52514e"}
 SPARE_COLORS = ["#008300", "#4a3aa7", "#e34948"]
+# Trainable models of the shared table (kaushik/config/defaults.yaml): HF id -> key.
+MODEL_KEYS = {spec["base_model"]: k for k, spec in defaults()["models"].items() if spec.get("lora")}
 # Run names: "<prefix>-<arm>-<model>[-<variant>]-seed<N>", e.g. our
 # "fragility-mcq_noreason-gptoss20b-seed0", cpt's "cpt-gptoss20b-r32-seed0" /
-# "cptk-gptoss20b-k1e4-lr3e-4-seed0", noise groups "fragility-mcq_noreason-gptoss20b".
+# "cptk-gptoss20b-1e4-lr2.9e-02-seed0", noise groups "fragility-mcq_noreason-gptoss20b".
 # Other folders spell the model without underscores (noise/: qwen38b, qwen3627b).
-MODEL_ALIASES = {k.replace("_", ""): k for k in MODEL_KEYS.values()} | {"qwen38b": "qwen8b"}
+DEFAULT_ALIASES = {"qwen38b": "qwen8b"}
+MODEL_ALIASES = {k.replace("_", ""): k for k in MODEL_KEYS.values()} | DEFAULT_ALIASES
 _MODEL_TOKEN = "|".join(sorted(set(MODEL_KEYS.values()) | set(MODEL_ALIASES), key=len, reverse=True))
 NAME_RE = re.compile(rf"^(?P<pre>.*?)-?(?P<model>{_MODEL_TOKEN})(?:-(?P<var>.*?))?(?:-?seed(?P<seed>\d+).*)?$")
+
+
+def kl_for(kl_dir: Path, name: str) -> float:
+    p = kl_dir / f"{name}.json"
+    return json.loads(p.read_text())["kl"]["kl_per_token"] if p.exists() else np.nan
 
 
 def arm_color(arm: str) -> str:
@@ -84,20 +89,21 @@ def arm_color(arm: str) -> str:
 
 # ----------------------------------------------------------------------------- loading
 
-def parse_name(name: str) -> tuple[str | None, str | None, int | None]:
+def parse_name(name: str, aliases: dict | None = None) -> tuple[str | None, str | None, int | None]:
     """-> (arm, model_key, seed) from a run or noise-group name, see NAME_RE."""
     m = NAME_RE.match(name)
     if not m:
         return None, None, None
     pre = re.sub(r"^(?:(?:noise|fragility|smoke)-)+", "", m["pre"] or "")
     arm = "-".join(t for t in (pre, m["var"] or "") if t) or None
-    return arm, MODEL_ALIASES.get(m["model"], m["model"]), int(m["seed"]) if m["seed"] else None
+    alias = MODEL_ALIASES | (aliases or {})
+    return arm, alias.get(m["model"], m["model"]), int(m["seed"]) if m["seed"] else None
 
 
-def run_identity(run_dir: Path, kind: str) -> dict:
+def run_identity(run_dir: Path, kind: str, aliases: dict | None = None) -> dict:
     cfg = yaml.safe_load((run_dir / "config.yaml").read_text()) if (run_dir / "config.yaml").exists() else {}
     name = cfg.get("run_name", run_dir.name)
-    arm_n, model_n, seed_n = parse_name(name)
+    arm_n, model_n, seed_n = parse_name(name, aliases)
     arm = cfg.get("arm") or arm_n or name
     model = MODEL_KEYS.get(cfg.get("base_model")) or cfg.get("model_key") or model_n or "?"
     seed = cfg.get("train", {}).get("seed", seed_n if seed_n is not None else 0)
@@ -117,7 +123,7 @@ def condition_of(block: str) -> str:
     return "baseline" if b == "baseline" else "stated"
 
 
-def load_rollouts(run_dir: Path, ident: dict) -> list[dict]:
+def load_rollouts(run_dir: Path, ident: dict, kl_dir: Path, degen_chars: int) -> list[dict]:
     rows = []
     for bdir in sorted(p for p in (run_dir / "eval").iterdir() if p.is_dir()):
         for path in sorted(bdir.glob("*.json")):
@@ -127,9 +133,9 @@ def load_rollouts(run_dir: Path, ident: dict) -> list[dict]:
             if ident["kind"] == "noise":  # noise/runs/<group>/eval/<block>/noise<k>.json
                 k = re.search(r"(?:noise|seed)(\d+)", stem)
                 seed, step = (int(k[1]) if k else seed), np.nan  # adapters have no training step
-                kl = kl_for(f"{ident['run']}--noise{seed}")
+                kl = kl_for(kl_dir, f"{ident['run']}--noise{seed}")
             elif step == ident["final_step"]:
-                kl = kl_for(ident["run"])
+                kl = kl_for(kl_dir, ident["run"])
             data = json.loads(path.read_text())
             split = data["config"].get("split") or "all"
             for rec in data["results"]:
@@ -144,24 +150,24 @@ def load_rollouts(run_dir: Path, ident: dict) -> list[dict]:
                                  "honest": float(is_honest(s)) if graded else np.nan,
                                  "raw": float(s["compliance"] == 1) if graded else np.nan,
                                  "correct": float(bool(s["correct"])), "chars": chars,
-                                 "degen": float(chars < DEGEN_CHARS), "kl": kl})
+                                 "degen": float(chars < degen_chars), "kl": kl})
     return rows
 
 
-def load_all() -> pd.DataFrame:
+def load_all(sources: dict[str, Path], kl_dir: Path, degen_chars: int, aliases: dict | None = None) -> pd.DataFrame:
     rows = []
-    for kind, root in RUN_ROOTS.items():
+    for kind, root in sources.items():
         if not root.is_dir():
             continue
         for run_dir in sorted(p for p in root.rglob("*") if p.is_dir() and (p / "eval").is_dir()):
             if any("smoke" in part for part in run_dir.relative_to(root).parts):
                 continue
-            ident = run_identity(run_dir, kind)
-            rows += load_rollouts(run_dir, ident)
+            ident = run_identity(run_dir, kind, aliases)
+            rows += load_rollouts(run_dir, ident, kl_dir, degen_chars)
             print(f"loaded {run_dir.name}: arm={ident['arm']} model={ident['model']} seed={ident['seed']}")
     df = pd.DataFrame(rows)
     if df.empty:
-        raise SystemExit(f"no eval JSONs under {[str(r) for r in RUN_ROOTS.values()]}")
+        raise SystemExit(f"no eval JSONs under {[str(r) for r in sources.values()]}")
     add_compl_long(df)
     return df
 
@@ -207,7 +213,7 @@ def boot_draws(df: pd.DataFrame, metric: str, n_boot: int, seed: int = 0) -> np.
     return draw(a) / np.maximum(draw(c), 1)
 
 
-def summarize(df: pd.DataFrame, keys: list[str], n_boot: int) -> pd.DataFrame:
+def summarize(df: pd.DataFrame, keys: list[str], n_boot: int, seed: int = 0) -> pd.DataFrame:
     out = []
     for g, sub in df.groupby(keys, sort=True, dropna=False):
         row = dict(zip(keys, g if isinstance(g, tuple) else (g,)))
@@ -216,7 +222,7 @@ def summarize(df: pd.DataFrame, keys: list[str], n_boot: int) -> pd.DataFrame:
             vals = sub[m].dropna()
             row[m] = vals.mean() if len(vals) else np.nan
             if m in CI_METRICS and len(vals):
-                row[f"{m}_lo"], row[f"{m}_hi"] = np.percentile(boot_draws(sub, m, n_boot), [2.5, 97.5])
+                row[f"{m}_lo"], row[f"{m}_hi"] = np.percentile(boot_draws(sub, m, n_boot, seed), [2.5, 97.5])
         by_seed = sub.groupby("seed")["honest"].mean().sort_index()
         row["honest_by_seed"] = " ".join(f"{v:.3f}" for v in by_seed if not np.isnan(v))
         out.append(row)
@@ -239,12 +245,12 @@ def to_markdown(df: pd.DataFrame, keys: list[str], metrics=("honest", "raw", "co
     return "\n".join(lines)
 
 
-def beats(df: pd.DataFrame, n_boot: int) -> str:
+def beats(df: pd.DataFrame, n_boot: int, val_modes: list[str], seed: int = 0) -> str:
     """For each trained (arm, model): final step minus untrained (step 0 of the
     same runs, paired on questions) and minus noise (noise adapters matched to
     that arm), on val (stated, 4 modes) and on test (9 training modes)."""
     lines = ["# Arms vs. untrained and noise (95% bootstrap intervals over questions and seeds)", ""]
-    views = {"val, stated, 4 modes": df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(VAL_MODES)],
+    views = {"val, stated, 4 modes": df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(val_modes)],
              "test, stated, 9 training modes": df[(df.split == "test") & (df.condition == "stated") & df["mode"].isin(TRAIN_MODES)]}
     for label, v in views.items():
         lines += [f"## {label}", ""]
@@ -259,13 +265,13 @@ def beats(df: pd.DataFrame, n_boot: int) -> str:
             parts = [f"**{arm} / {model}** (step {final_step}, {fin.seed.nunique()} seeds)"]
             verdict = []
             for m in ("honest", "compl_long"):
-                d_fin = boot_draws(fin, m, n_boot)
+                d_fin = boot_draws(fin, m, n_boot, seed)
                 for ref_name, ref in (("untrained", untr), ("noise", noise)):
                     if ref.empty:
                         parts.append(f"{m} vs {ref_name}: n/a")
                         verdict.append(None)
                         continue
-                    d = d_fin - boot_draws(ref, m, n_boot)
+                    d = d_fin - boot_draws(ref, m, n_boot, seed)
                     lo, hi = np.percentile(d, [2.5, 97.5])
                     parts.append(f"{m} vs {ref_name}: {fin[m].mean() - ref[m].mean():+.3f} [{lo:+.3f}, {hi:+.3f}]")
                     verdict.append(bool(lo > 0))
@@ -277,17 +283,17 @@ def beats(df: pd.DataFrame, n_boot: int) -> str:
     return "\n".join(lines)
 
 
-def summary_table(df: pd.DataFrame, n_boot: int) -> str:
+def summary_table(df: pd.DataFrame, n_boot: int, val_modes: list[str], seed: int = 0) -> str:
     """Compact per (arm, model) view for the README: untrained -> final honest
     compliance, the other final metrics, the matched noise control and KL."""
     views = {"val split, stated condition, 4 modes pooled (200 q x seeds)":
-             df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(VAL_MODES)],
+             df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(val_modes)],
              "test split, stated condition, 9 training modes (500 q x seeds)":
              df[(df.split == "test") & (df.condition == "stated") & df["mode"].isin(TRAIN_MODES)]}
     out = []
     for label, v in views.items():
-        rows = ["| arm | model | seeds | honest@0 | honest@final | raw@final | compl_long@final | acc@0 -> final "
-                "| chars@0 -> final | degen@final | KL | noise honest [CI] (KL) |", "|" + "---|" * 12]
+        rows = [("| arm | model | seeds | honest@0 | honest@final | raw@final | compl_long@final | acc@0 -> final "
+                 "| chars@0 -> final | degen@final | KL | noise honest [CI] (KL) |"), "|" + "---|" * 12]
         for (arm, model), sub in v[v.arm != "noise"].groupby(["arm", "model"]):
             fin_step = sub.step.max()
             fin, untr = sub[sub.step == fin_step], v[(v.model == model) & (v.step == 0)]
@@ -296,7 +302,7 @@ def summary_table(df: pd.DataFrame, n_boot: int) -> str:
                 continue
 
             def ci(d, m):
-                lo, hi = np.percentile(boot_draws(d, m, n_boot), [2.5, 97.5])
+                lo, hi = np.percentile(boot_draws(d, m, n_boot, seed), [2.5, 97.5])
                 return f"{d[m].mean():.3f} [{lo:.3f}, {hi:.3f}]"
             noise_cell = f"{ci(noise, 'honest')} ({noise.kl.mean():.3f})" if not noise.empty else "–"
             rows.append(f"| {arm} | {model} | {fin.seed.nunique()} | {untr.honest.mean():.3f} | {ci(fin, 'honest')} | "
@@ -309,17 +315,16 @@ def summary_table(df: pd.DataFrame, n_boot: int) -> str:
 
 # ----------------------------------------------------------------------------- plot
 
-def plot(val: pd.DataFrame, out_path: Path) -> None:
+def plot(val: pd.DataFrame, out_path: Path, model_order: list[str], max_step: int) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    models = [m for m in ("gptoss20b", "qwen8b", "qwen36_27b") if m in set(val.model)] or sorted(set(val.model))
+    models = [m for m in model_order if m in set(val.model)] or sorted(set(val.model))
     metrics = [("honest", "honest compliance"), ("compl_long", "compliance, traces ≥ untrained median")]
     # Multi-seed arms only (single-seed LR-sweep points live in the CSV tables),
     # over the matched 50-step dose.
     val = val[(val.n_seeds >= 2) | (val.arm == "noise")]
-    max_step = 50
     fig, axes = plt.subplots(len(metrics), len(models), squeeze=False,
                              figsize=(5.2 * len(models), 3.6 * len(metrics) + 0.6), facecolor="#fcfcfb")
     for j, model in enumerate(models):
@@ -365,23 +370,27 @@ def plot(val: pd.DataFrame, out_path: Path) -> None:
 
 # ----------------------------------------------------------------------------- main
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+def main(cfg: dict, argv: list[str] | None = None) -> None:
+    an = cfg["analysis"]
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--plot", action="store_true")
-    ap.add_argument("--boot", type=int, default=1000)
-    ap.add_argument("--out", default=str(RESULTS))
+    ap.add_argument("--boot", type=int, default=int(an["bootstrap_draws"]))
+    ap.add_argument("--seed", type=int, default=int(an["bootstrap_seed"]))
+    ap.add_argument("--out", default=str(results_dir(cfg)))
     args = ap.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    val_modes, seed = list(an["val_modes"]), args.seed
 
-    df = load_all()
+    df = load_all({k: ROOT / v for k, v in an["sources"].items()}, ROOT / an["kl_dir"], int(an["degen_chars"]),
+                  an.get("model_aliases") or {})
     df.to_csv(out / "exp1_rollouts.csv.gz", index=False)
 
-    val = df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(VAL_MODES)]
-    tbl = summarize(val, ["arm", "target_arm", "model", "step"], args.boot)
+    val = df[(df.split == "val") & (df.condition == "stated") & df["mode"].isin(val_modes)]
+    tbl = summarize(val, ["arm", "target_arm", "model", "step"], args.boot, seed)
     tbl.to_csv(out / "exp1_val_table.csv", index=False)
     (out / "exp1_val_table.md").write_text(to_markdown(tbl, ["arm", "model", "step"]))
-    summarize(val, ["arm", "model", "step", "mode"], args.boot).to_csv(out / "exp1_val_by_mode.csv", index=False)
+    summarize(val, ["arm", "model", "step", "mode"], args.boot, seed).to_csv(out / "exp1_val_by_mode.csv", index=False)
     print(to_markdown(tbl, ["arm", "model", "step"]))
 
     test = df[df.split == "test"].copy()
@@ -390,27 +399,27 @@ def main(argv: list[str] | None = None) -> None:
                                   np.where(test["mode"].isin(HELDOUT_MODES), "heldout", "train_modes"))
         stated = test[test.condition.isin(["stated", "baseline"])]
         keys = ["arm", "target_arm", "model", "step", "subset"]
-        ttbl = summarize(stated, keys, args.boot)
+        ttbl = summarize(stated, keys, args.boot, seed)
         ttbl.to_csv(out / "exp1_test_table.csv", index=False)
         (out / "exp1_test_table.md").write_text(to_markdown(ttbl, keys))
-        summarize(stated, ["arm", "target_arm", "model", "step", "mode"], args.boot).to_csv(
+        summarize(stated, ["arm", "target_arm", "model", "step", "mode"], args.boot, seed).to_csv(
             out / "exp1_test_by_mode.csv", index=False)
 
-    conds = df[df.condition.isin(["persona", "direct", "stated"]) & df["mode"].isin(VAL_MODES)]
+    conds = df[df.condition.isin(["persona", "direct", "stated"]) & df["mode"].isin(val_modes)]
     multi = conds[conds.model.isin(conds[conds.condition != "stated"].model.unique())]
     if not multi.empty:
         keys = ["arm", "target_arm", "model", "split", "condition", "step"]
-        ctbl = summarize(multi, keys, args.boot)
+        ctbl = summarize(multi, keys, args.boot, seed)
         ctbl.to_csv(out / "exp1_conditions.csv", index=False)
         (out / "exp1_conditions.md").write_text(to_markdown(ctbl, keys))
 
-    (out / "exp1_summary.md").write_text(summary_table(df, args.boot))
-    (out / "beats.md").write_text(beats(df, args.boot))
+    (out / "exp1_summary.md").write_text(summary_table(df, args.boot, val_modes, seed))
+    (out / "beats.md").write_text(beats(df, args.boot, val_modes, seed))
     print((out / "exp1_summary.md").read_text())
     print((out / "beats.md").read_text())
     if args.plot:
-        plot(tbl, out / "compliance_vs_step.png")
+        plot(tbl, out / "compliance_vs_step.png", list(an["plot_models"]), int(an["plot_max_step"]))
 
 
 if __name__ == "__main__":
-    main()
+    main(resolve(EXP), sys.argv[1:])

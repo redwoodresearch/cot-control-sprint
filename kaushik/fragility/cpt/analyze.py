@@ -7,17 +7,20 @@ runs/<run>/eval/<block>/checkpoint-<step>.json and reports, per rollout,
               extracted + trace not truncated/short/repetitive/compressible)
   strict      the raw strict grader
   correct     answer accuracy
-  chars       reasoning length; degen = chars < 200
+  chars       reasoning length; degen = chars < analysis.degen_chars
   compl_long  strict compliance among traces at least as long as the
               untrained (checkpoint-0) median for the same mode
 
 Intervals are 95% bootstrap over questions and seeds (questions resampled as
 clusters shared across seeds, seeds resampled with replacement; paired against
 checkpoint-0 of the same runs). KL(base || adapter) and noise-control evals
-are read from kaushik/noise/runs/<run_name>/ when present.
+are read from analysis.noise_runs/<group>/ when present. Every table constant
+(val modes, test blocks, 1B steps, the k labels and adapter sizes) comes from
+config.yaml `analysis`; the 1C LR grid per (model, k) is read from the stage-1
+sweep (analysis.lr_sweep).
 
-    .venv/bin/python kaushik/run.py fragility/cpt analyze [--no-plots] [--boot 2000]
-Outputs: results/{tables.md, summary.json, rows.csv, dose.png, kcurve.png}.
+    .venv/bin/python kaushik/run.py fragility/cpt analyze [--no-plots] [--boot 2000] [--out DIR]
+Outputs: results/{tables.md, summary.json, rows.csv, lr_selection.json (read), dose.png, kcurve.png, losscurve.png}.
 """
 
 from __future__ import annotations
@@ -30,23 +33,50 @@ import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(HERE))
-import make_configs as mc
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from cotcontrol.eval.grading import is_honest
+from kaushik.core.config import resolve, results_dir, runs_root
+from kaushik.core.sweep import expand_points, load_sweep
 
-RUNS = HERE / "runs"
-RESULTS = HERE / "results"
-NOISE_RUNS = ROOT / "kaushik" / "noise" / "runs"
-DEGEN_CHARS = 200
-VAL_BLOCKS = [f"val_{m}" for m in mc.VAL_MODES]
-K_ORDER = ["1e3", "1e4", "1e5", "r1", "r32"]
+EXP = "fragility/cpt"
+P = SimpleNamespace()   # table parameters, set from the config by configure()
+
+
+def configure(cfg: dict) -> SimpleNamespace:
+    """Fill P from the resolved fragility/cpt config (analysis / train / eval sections)."""
+    an, tr = cfg["analysis"], cfg["train"]
+    P.runs, P.results, P.noise_runs = runs_root(cfg), results_dir(cfg), ROOT / an["noise_runs"]
+    P.models, P.degen_chars, P.loss_window = list(an["models"]), int(an["degen_chars"]), int(an["loss_window"])
+    P.val_modes, P.extra_val_modes = list(an["val_modes"]), list(an["extra_val_modes"])
+    P.val_blocks, P.test_blocks = [f"val_{m}" for m in P.val_modes], list(an["test_blocks"])
+    P.lr_1b, P.save_1b, P.final_1b = float(tr["lr"]), [int(s) for s in tr["save_at_steps"]], list(an["final_steps_1b"])
+    P.steps_1c, P.ks, P.k_order = int(an["steps_1c"]), dict(an["ks"]), list(an["k_order"])
+    P.adapter_numel, P.guard = an["adapter_numel"], float(an["select"]["guard"])
+    P.sweep_points = expand_points(load_sweep(ROOT / an["lr_sweep"]))
+    return P
+
+
+def lr_grid(model: str, klabel: str) -> list[float]:
+    """The LR rungs of the stage-1 sweep for one (model, k), ascending."""
+    return sorted({float(p["overrides"]["train.lr"]) for p in P.sweep_points
+                   if p["labels"]["model"] == model and str(p["labels"]["k"]) == str(klabel)})
+
+
+def predicted_lr(model: str, klabel: str) -> float:
+    """lr_pred of the iso-drive rule, as recorded in the sweep (cpt_meta.lr_predicted)."""
+    return next(float(p["overrides"]["cpt_meta.lr_predicted"]) for p in P.sweep_points
+                if p["labels"]["model"] == model and str(p["labels"]["k"]) == str(klabel))
+
+
+def adapter_numel(model: str, rank: int) -> int:
+    return int(P.adapter_numel[model][f"r{rank}"])
 
 
 def mean(xs) -> float:
@@ -69,7 +99,7 @@ def load_rollouts(path: Path, keep_errors: bool = False) -> list[dict]:
                 "error": bool(s.get("error")), "honest": is_honest(s),
                 "strict": s.get("compliance") == 1, "correct": s.get("correct") is True,
                 "answered": bool(s.get("extracted_answer")),  # 'ANSWER: X' present (format intact)
-                "chars": chars, "degen": chars < DEGEN_CHARS,
+                "chars": chars, "degen": chars < P.degen_chars,
                 "truncated": s.get("finish_reason") == "length",
             })
     return rows
@@ -91,7 +121,7 @@ def run_meta(rd: Path) -> dict | None:
 
 def discover_runs() -> list[dict]:
     runs = []
-    for rd in sorted(p for p in RUNS.glob("cpt*") if p.is_dir()):
+    for rd in sorted(p for p in P.runs.glob("cpt*") if p.is_dir()):
         meta = run_meta(rd)
         if not meta:
             continue
@@ -108,7 +138,7 @@ def block_rows(rd: Path, block: str, step: int) -> list[dict] | None:
 
 def val_rows(rd: Path, step: int) -> list[dict] | None:
     out = []
-    for b in VAL_BLOCKS:
+    for b in P.val_blocks:
         r = block_rows(rd, b, step)
         if r is None:
             return None
@@ -211,9 +241,9 @@ def _noise_groups() -> list[tuple[Path, dict]]:
     """kaushik/noise/runs/<group>/results.json for every group (the noise agent
     groups registry entries by arm x model, e.g. fragility-cpt-cpt-step50-gptoss20b)."""
     out = []
-    if not NOISE_RUNS.exists():
+    if not P.noise_runs.exists():
         return out
-    for p in sorted(NOISE_RUNS.glob("*/results.json")):
+    for p in sorted(P.noise_runs.glob("*/results.json")):
         try:
             out.append((p.parent, json.loads(p.read_text())))
         except (OSError, json.JSONDecodeError):
@@ -246,7 +276,7 @@ def noise_rows(group_dir: Path) -> dict[str, list[list[dict]]]:
     """Noise-control eval JSONs of a group (eval/<block>/noise<i>.json), grouped
     by test block, one rollout list per noise adapter."""
     out: dict[str, list[list[dict]]] = {}
-    for block in mc.TEST_BLOCKS:
+    for block in P.test_blocks:
         files = sorted((group_dir / "eval" / block).glob("*.json"))
         if files:
             out[block] = [load_rollouts(f) for f in files]
@@ -255,7 +285,7 @@ def noise_rows(group_dir: Path) -> dict[str, list[list[dict]]]:
 
 # ----------------------------------------------------------------------------- C4 loss (functional size)
 
-LOSS_WINDOW = 3  # each step already averages 48 x 4096 tokens; a longer window would blur the early descent
+P.loss_window = 3  # each step already averages 48 x 4096 tokens; a longer window would blur the early descent
 
 
 def load_losses(rd: Path) -> dict[int, float]:
@@ -267,10 +297,11 @@ def load_losses(rd: Path) -> dict[int, float]:
     return {int(d["step"]): float(d["loss"]) for d in map(json.loads, filter(str.strip, f.read_text().splitlines()))}
 
 
-def loss_at(rd: Path, step: int, window: int = LOSS_WINDOW) -> float | None:
+def loss_at(rd: Path, step: int, window: int | None = None) -> float | None:
     """C4 loss of a checkpoint: the mean over the `window` optimizer steps ending
     at `step` (single 48-row steps are noisy). Step 0 is the first step's loss,
     i.e. the untrained model's (LoRA B starts at zero)."""
+    window = P.loss_window if window is None else window
     by = load_losses(rd)
     if not by:
         return None
@@ -339,7 +370,7 @@ def test_table(group: list[dict], step: int, n_boot: int, base_group: list[dict]
     """Final-checkpoint test blocks: training modes, held-out modes, baseline accuracy."""
     out = {}
     base_group = base_group or group
-    for block in mc.TEST_BLOCKS:
+    for block in P.test_blocks:
         per_seed = [rows for r in group if (rows := block_rows(r["dir"], block, step))]
         if not per_seed:
             continue
@@ -366,7 +397,7 @@ def per_mode_table(group: list[dict], steps: list[int], n_boot: int, title: str)
     """Honest compliance per val mode (incl. EXTRA_VAL_MODES) at each step vs
     checkpoint-0, paired bootstrap; the pooled headline can hide a mode-specific
     effect (gpt-oss moves on repeat_sentences, not on the fixed-trait modes)."""
-    modes = mc.VAL_MODES + mc.EXTRA_VAL_MODES
+    modes = P.val_modes + P.extra_val_modes
     lines = [f"\n#### {title}", "", "| mode | step 0 | " + " | ".join(f"step {s} [Δ CI]" for s in steps) + " |",
              "|---|---|" + "---|" * len(steps)]
     data = {}
@@ -388,7 +419,8 @@ def per_mode_table(group: list[dict], steps: list[int], n_boot: int, title: str)
     return lines, data
 
 
-def md_dose(model: str, series: dict[int, dict], lr: float = mc.LR_1B) -> list[str]:
+def md_dose(model: str, series: dict[int, dict], lr: float | None = None) -> list[str]:
+    lr = P.lr_1b if lr is None else lr
     lines = [f"\n#### 1B dose: {model}, LoRA r32 lr {lr:.1e} (val, 4 fixed-trait modes x 200 q, pooled; honest CI over questions x seeds)",
              "", "| step | seeds | honest [95% CI] | seed spread | Δ vs step 0 [CI] | strict | compl_long | acc | answered | chars | degen |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -468,13 +500,13 @@ def functional_size(model: str, groups: dict, selection: dict, g1b: list[dict], 
         cells.append(c)
     for (mdl, arm, _k, lr), g in sorted(groups.items(), key=lambda kv: -kv[0][3]):
         if mdl == model and arm in ("cpt", "cpt_lowlr"):
-            tag = "1B r32" if lr == mc.LR_1B else f"1B r32 lr {lr:.1e}"
-            cells += [c for s in mc.SAVE_1B if (c := _cell(f"{tag} step {s}", tag, g, s, n_boot))]
-    for klabel in mc.KS:
+            tag = "1B r32" if lr == P.lr_1b else f"1B r32 lr {lr:.1e}"
+            cells += [c for s in P.save_1b if (c := _cell(f"{tag} step {s}", tag, g, s, n_boot))]
+    for klabel in P.ks:
         sel = (selection.get(f"{model}/{klabel}") or {}).get("lr")
-        for lr in mc.lr_grid(model, klabel):
+        for lr in lr_grid(model, klabel):
             g = groups.get((model, "cpt_param_sweep", klabel, lr), [])
-            if g and (c := _cell(f"1C {klabel} lr {lr:.1e}" + (" (selected)" if lr == sel else ""), f"1C {klabel}", g, mc.STEPS_1C, n_boot)):
+            if g and (c := _cell(f"1C {klabel} lr {lr:.1e}" + (" (selected)" if lr == sel else ""), f"1C {klabel}", g, P.steps_1c, n_boot)):
                 cells.append(c)
     ref = [c for c in cells if c["series"] in ("untrained", "1B r32") and c["loss"] is not None]
     for c in cells:
@@ -497,7 +529,7 @@ def functional_size(model: str, groups: dict, selection: dict, g1b: list[dict], 
 
 
 def md_functional(model: str, cells: list[dict]) -> list[str]:
-    lines = [(f"\n#### Compliance at matched functional size: {model} (every evaluated cell; C4 loss = mean of the {LOSS_WINDOW} steps ending at the checkpoint, "
+    lines = [(f"\n#### Compliance at matched functional size: {model} (every evaluated cell; C4 loss = mean of the {P.loss_window} steps ending at the checkpoint, "
               "KL(base‖adapter) where measured; 'nearest 1B' = the spec-1B checkpoint closest in C4 loss, unpaired bootstrap)"),
              "", "| cell | seeds | C4 loss | KL | val honest [CI] | val acc | repeat_sent. honest | test honest [CI] | held-out honest | test acc | vs nearest 1B by loss: val Δ honest / Δ acc | vs nearest 1B by loss: test Δ honest / Δ acc |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -515,49 +547,53 @@ def md_functional(model: str, cells: list[dict]) -> list[str]:
 
 # ----------------------------------------------------------------------------- main
 
-def main(argv: list[str] | None = None) -> None:
+def main(cfg: dict, argv: list[str] | None = None) -> None:
+    configure(cfg)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--boot", type=int, default=2000)
+    ap.add_argument("--boot", type=int, default=int(cfg["analysis"]["bootstrap_draws"]))
+    ap.add_argument("--out", default=None, help="results dir (default: results/)")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args(argv)
-    RESULTS.mkdir(parents=True, exist_ok=True)
+    if args.out:
+        P.results = Path(args.out)
+    P.results.mkdir(parents=True, exist_ok=True)
     runs = discover_runs()
     if not runs:
-        raise SystemExit(f"no runs under {RUNS}")
+        raise SystemExit(f"no runs under {P.runs}")
     groups = group_runs(runs)
-    selection = json.loads((RESULTS / "lr_selection.json").read_text()) if (RESULTS / "lr_selection.json").exists() else {}
+    selection = json.loads((P.results / "lr_selection.json").read_text()) if (P.results / "lr_selection.json").exists() else {}
     md, summary, csv_rows = ["# fragility/cpt results", ""], {"models": {}}, []
 
-    for model in mc.MODELS:
+    for model in P.models:
         S = summary["models"][model] = {}
         md.append(f"\n## {model}")
         # ---- 1B dose (the spec arm at LR_1B; plus any supplementary low-LR variants)
-        g1b = groups.get((model, "cpt", "r32", mc.LR_1B), [])
+        g1b = groups.get((model, "cpt", "r32", P.lr_1b), [])
         for (mdl, arm, _kl, lr), g in sorted(groups.items(), key=lambda kv: -kv[0][3]):
             if mdl != model or arm not in ("cpt", "cpt_lowlr"):
                 continue
-            series = val_series(g, [0] + mc.SAVE_1B, args.boot)
+            series = val_series(g, [0] + P.save_1b, args.boot)
             if not series:
                 continue
-            tag = "dose_val" if lr == mc.LR_1B else f"dose_val_lr{lr:.1e}"
+            tag = "dose_val" if lr == P.lr_1b else f"dose_val_lr{lr:.1e}"
             md += md_dose(model, series, lr)
             S[tag] = strip_reps(series)
-            lines, pm = per_mode_table(g, mc.FINAL_1B, args.boot,
+            lines, pm = per_mode_table(g, P.final_1b, args.boot,
                                        f"1B per val mode: {model}, lr {lr:.1e} (honest, 200 q x {len(g)} seed(s); Δ vs step 0 paired)")
             md += lines
             S[tag.replace("dose_val", "dose_per_mode")] = pm
-            if lr != mc.LR_1B:
+            if lr != P.lr_1b:
                 rows_lr = [(f"1B r32 lr {lr:.1e} step {s}" + (" (untrained)" if s == 0 else ""),
-                            test_table(g, s, args.boot)) for s in [0] + mc.FINAL_1B]
+                            test_table(g, s, args.boot)) for s in [0] + P.final_1b]
                 md += md_test(f"1B supplementary low-LR arm, final checkpoints: {model}, lr {lr:.1e}", rows_lr)
-                S[f"test_1b_lr{lr:.1e}"] = {s: strip_reps(t) for (_, t), s in zip(rows_lr, [0] + mc.FINAL_1B) if t}
+                S[f"test_1b_lr{lr:.1e}"] = {s: strip_reps(t) for (_, t), s in zip(rows_lr, [0] + P.final_1b) if t}
         series = S.get("dose_val", {})
         for step, s in series.items():
-            csv_rows.append({"model": model, "arm": "cpt", "klabel": "r32", "lr": mc.LR_1B, "block": "val_pooled",
+            csv_rows.append({"model": model, "arm": "cpt", "klabel": "r32", "lr": P.lr_1b, "block": "val_pooled",
                              "step": step, **{k: s[k] for k in ("n", "honest", "strict", "accuracy", "answered", "chars", "degen", "compl_long")}})
         # ---- 1B final test (+ noise)
         test_rows = []
-        for step in [0] + mc.FINAL_1B:
+        for step in [0] + P.final_1b:
             t = test_table(g1b, step, args.boot) if g1b else None
             test_rows.append((f"1B r32 step {step}" + (" (untrained)" if step == 0 else ""), t))
             if t:
@@ -565,8 +601,8 @@ def main(argv: list[str] | None = None) -> None:
         # KL-matched random-LoRA controls (one noise group per arm x model x step,
         # built by kaushik/noise from the registry entries): arm vs noise, unpaired.
         vs_noise_lines = []
-        for step in mc.FINAL_1B:
-            suffix = "" if step == max(mc.FINAL_1B) else f"-step{step}"
+        for step in P.final_1b:
+            suffix = "" if step == max(P.final_1b) else f"-step{step}"
             grp = next((ng for r in g1b if (ng := noise_group(r["name"] + suffix))), None)
             if not grp:
                 continue
@@ -602,52 +638,52 @@ def main(argv: list[str] | None = None) -> None:
         md += md_test(f"1B final checkpoints: {model}", test_rows)
         if vs_noise_lines:
             md += ["", "Arm minus KL-matched noise controls (unpaired bootstrap over questions x seeds/adapters):"] + vs_noise_lines
-        kls = {r["name"]: {s: find_kl(r["name"] + ("" if s == max(mc.FINAL_1B) else f"-step{s}")) for s in mc.FINAL_1B} for r in g1b}
+        kls = {r["name"]: {s: find_kl(r["name"] + ("" if s == max(P.final_1b) else f"-step{s}")) for s in P.final_1b} for r in g1b}
         if any(v is not None for d in kls.values() for v in d.values()):
             md.append("\nKL(base || adapter) from kaushik/noise/runs: " + "; ".join(
                 f"{n}: " + ", ".join(f"step {s}: {v:.4f}" for s, v in d.items() if v is not None) for n, d in kls.items()))
             S["kl_1b"] = kls
 
         # ---- 1C LR sweep (seed 0)
-        md += [f"\n#### 1C LR sweep: {model} (seed 0, val pooled, step {mc.STEPS_1C}; guard = final acc ≥ {100 * 0.85:.0f}% of step-0 acc)",
+        md += [f"\n#### 1C LR sweep: {model} (seed 0, val pooled, step {P.steps_1c}; guard = final acc ≥ {100 * P.guard:.0f}% of step-0 acc)",
                "", "| k | lr (×pred) | honest@50 | strict@50 | acc 0→50 | compl_long | k_eff | loss | selected |", "|---|---|---|---|---|---|---|---|---|"]
-        for klabel in mc.KS:
+        for klabel in P.ks:
             sel = selection.get(f"{model}/{klabel}", {})
-            for lr in mc.lr_grid(model, klabel):
+            for lr in lr_grid(model, klabel):
                 g = groups.get((model, "cpt_param_sweep", klabel, lr), [])
                 r0 = next((r for r in g if r["meta"]["seed"] == 0), None)
                 if not r0:
                     continue
-                rows0, rows50 = val_rows(r0["dir"], 0), val_rows(r0["dir"], mc.STEPS_1C)
+                rows0, rows50 = val_rows(r0["dir"], 0), val_rows(r0["dir"], P.steps_1c)
                 tr = r0["train_result"] or {}
                 keff = (tr.get("mask_verification") or {}).get("n_changed_inside_mask")
                 if rows0 and rows50:
                     s0, s50 = summarize(rows0, None), summarize(rows50, rows0)
-                    md.append(f"| {klabel} | {lr:.1e} (×{lr / mc.predicted_lr(model, klabel):.2f}) | {fmt(s50['honest'])} | {fmt(s50['strict'])} | "
+                    md.append(f"| {klabel} | {lr:.1e} (×{lr / predicted_lr(model, klabel):.2f}) | {fmt(s50['honest'])} | {fmt(s50['strict'])} | "
                               f"{fmt(s0['accuracy'])}→{fmt(s50['accuracy'])} | {fmt(s50['compl_long'])} | {keff if keff is not None else 'all'} | "
                               f"{tr.get('final_loss', float('nan')):.3f} | {'**yes**' if sel.get('lr') == lr else ''} |")
                     csv_rows.append({"model": model, "arm": "cpt_param_sweep", "klabel": klabel, "lr": lr, "block": "val_pooled",
-                                     "step": mc.STEPS_1C, "seed": 0, **{k: s50[k] for k in ("n", "honest", "strict", "accuracy", "answered", "chars", "degen", "compl_long")}})
+                                     "step": P.steps_1c, "seed": 0, **{k: s50[k] for k in ("n", "honest", "strict", "accuracy", "answered", "chars", "degen", "compl_long")}})
                 else:
                     md.append(f"| {klabel} | {lr:.1e} | (pending) | | | | {keff} | {tr.get('final_loss', float('nan')):.3f} | |")
 
         # ---- 1C k-curve at step 50 (selected LR, all seeds) + r32 top point
         curve = {}
-        for klabel in K_ORDER:
+        for klabel in P.k_order:
             if klabel == "r32":
-                g, lr, step = g1b, mc.LR_1B, mc.STEPS_1C
+                g, lr, step = g1b, P.lr_1b, P.steps_1c
             else:
                 sel = selection.get(f"{model}/{klabel}")
                 if not sel:
                     continue
-                lr, step = sel["lr"], mc.STEPS_1C
+                lr, step = sel["lr"], P.steps_1c
                 g = groups.get((model, "cpt_param_sweep", klabel, lr), [])
             per_seed = [rows for r in g if (rows := val_rows(r["dir"], step))]
             base = [rows for r in g if (rows := val_rows(r["dir"], 0))]
             if not per_seed or len(base) != len(per_seed):
                 continue
             keffs = [(r["train_result"] or {}).get("mask_verification", {}) or {} for r in g]
-            k_nom = mc.adapter_numel(model, 32 if klabel == "r32" else 1) if klabel in ("r1", "r32") else mc.KS[klabel]
+            k_nom = adapter_numel(model, 32 if klabel == "r32" else 1) if klabel in ("r1", "r32") else P.ks[klabel]
             curve[klabel] = {
                 "k_nominal": k_nom, "lr": lr, "n_seeds": len(per_seed),
                 "k_effective": [k.get("n_changed_inside_mask") for k in keffs],
@@ -657,7 +693,7 @@ def main(argv: list[str] | None = None) -> None:
                 "runs": [r["name"] for r in g],
             }
         if curve:
-            md += [f"\n#### 1C compliance vs trainable parameters: {model} (val pooled, step {mc.STEPS_1C}, selected LR, seeds 0-2)",
+            md += [f"\n#### 1C compliance vs trainable parameters: {model} (val pooled, step {P.steps_1c}, selected LR, seeds 0-2)",
                    "", "| k | k_eff | lr | seeds | honest [CI] | seed spread | Δ vs untrained [CI] | strict | compl_long | acc | KL(base‖adapter) |", "|---|---|---|---|---|---|---|---|---|---|---|"]
             for klabel, c in curve.items():
                 h, s = c["stats"]["honest"], c["summary"]
@@ -668,7 +704,7 @@ def main(argv: list[str] | None = None) -> None:
                           f"{', '.join(f'{k:.4f}' for k in kl) if kl else '-'} |")
             for klabel, c in curve.items():
                 g = [r for r in runs if r["name"] in c["runs"]]
-                lines, pm = per_mode_table(g, [mc.STEPS_1C], args.boot,
+                lines, pm = per_mode_table(g, [P.steps_1c], args.boot,
                                            f"1C per val mode, {model} k={klabel} (lr {c['lr']:.1e}, seeds {c['n_seeds']})")
                 md += lines
                 S.setdefault("kcurve_per_mode", {})[klabel] = pm
@@ -709,12 +745,12 @@ def main(argv: list[str] | None = None) -> None:
                 if klabel == "r32":
                     continue
                 g = [r for r in runs if r["name"] in c["runs"]]
-                t = test_table(g, mc.STEPS_1C, args.boot, base_group=g1b, base_step=0) if g1b else test_table(g, mc.STEPS_1C, args.boot)
+                t = test_table(g, P.steps_1c, args.boot, base_group=g1b, base_step=0) if g1b else test_table(g, P.steps_1c, args.boot)
                 rows.append((f"1C {klabel} lr {c['lr']:.1e}", t))
                 if t:
                     S.setdefault("test_1c", {})[klabel] = strip_reps(t)
             if rows:
-                md += md_test(f"1C final checkpoints (step {mc.STEPS_1C}): {model}; Δ vs the 1B runs' checkpoint-0 on the same items", rows)
+                md += md_test(f"1C final checkpoints (step {P.steps_1c}): {model}; Δ vs the 1B runs' checkpoint-0 on the same items", rows)
         # ---- every cell on one functional-size axis (C4 loss; KL where measured)
         cells = functional_size(model, groups, selection, g1b, args.boot)
         if cells:
@@ -726,17 +762,17 @@ def main(argv: list[str] | None = None) -> None:
                                  "honest": c["val"]["honest"]["mean"], "strict": c["val"]["strict"], "accuracy": c["val"]["accuracy"]["mean"],
                                  "test_honest": (c.get("test_train_modes") or {}).get("honest", {}).get("mean")})
 
-    (RESULTS / "tables.md").write_text("\n".join(md) + "\n")
-    (RESULTS / "summary.json").write_text(json.dumps(strip_reps(summary), indent=2, default=str))
+    (P.results / "tables.md").write_text("\n".join(md) + "\n")
+    (P.results / "summary.json").write_text(json.dumps(strip_reps(summary), indent=2, default=str))
     if csv_rows:
-        with (RESULTS / "rows.csv").open("w", newline="") as f:
+        with (P.results / "rows.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=sorted({k for r in csv_rows for k in r}))
             w.writeheader()
             w.writerows(csv_rows)
     print("\n".join(md))
     if not args.no_plots:
         plots(summary)
-    print(f"\nwrote {RESULTS}/{{tables.md, summary.json, rows.csv}}")
+    print(f"\nwrote {P.results}/{{tables.md, summary.json, rows.csv}}")
 
 
 def plots(summary: dict) -> None:
@@ -744,7 +780,7 @@ def plots(summary: dict) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    models = [m for m in mc.MODELS if summary["models"].get(m, {}).get("dose_val")]
+    models = [m for m in P.models if summary["models"].get(m, {}).get("dose_val")]
     if models:
         fig, axes = plt.subplots(1, len(models), figsize=(6 * len(models), 4), squeeze=False)
         for ax, m in zip(axes[0], models):
@@ -764,8 +800,8 @@ def plots(summary: dict) -> None:
             ax.grid(alpha=0.3)
             ax.legend(fontsize=8)
         fig.tight_layout()
-        fig.savefig(RESULTS / "dose.png", dpi=150)
-    models = [m for m in mc.MODELS if summary["models"].get(m, {}).get("kcurve")]
+        fig.savefig(P.results / "dose.png", dpi=150)
+    models = [m for m in P.models if summary["models"].get(m, {}).get("kcurve")]
     if models:
         fig, axes = plt.subplots(1, len(models), figsize=(6 * len(models), 4), squeeze=False)
         for ax, m in zip(axes[0], models):
@@ -787,17 +823,17 @@ def plots(summary: dict) -> None:
             ax.set_xscale("log")
             ax.set_xticks(ks)
             ax.set_xticklabels([f"{k}\n({curve[k]['k_nominal']:.1e})" for k in curve], fontsize=8)
-            ax.set_title(f"1C cpt_param_sweep @ step {mc.STEPS_1C}: {m}")
+            ax.set_title(f"1C cpt_param_sweep @ step {P.steps_1c}: {m}")
             ax.set_xlabel("trainable LoRA scalars k (rank-1 masked; r1/r32 = full adapters)")
             ax.set_ylabel("val compliance (4 modes x 200 q, 3 seeds)")
             ax.grid(alpha=0.3)
             ax.legend(fontsize=8)
         fig.tight_layout()
-        fig.savefig(RESULTS / "kcurve.png", dpi=150)
-    models = [m for m in mc.MODELS if summary["models"].get(m, {}).get("functional_size")]
+        fig.savefig(P.results / "kcurve.png", dpi=150)
+    models = [m for m in P.models if summary["models"].get(m, {}).get("functional_size")]
     if models:
         plot_losscurve(summary, models, plt)
-    print(f"saved plots to {RESULTS}")
+    print(f"saved plots to {P.results}")
 
 
 SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]  # fixed categorical order
@@ -856,8 +892,8 @@ def plot_losscurve(summary: dict, models: list[str], plt) -> None:
     fig.text(0.5, 0.005, "Error bars: 95% bootstrap over questions × seeds. Filled = 1B checkpoints and the selected 1C learning rate (3 seeds); "
              "hollow = the other LR rungs of the sweep (seed 0). x = untrained model.", ha="center", fontsize=8)
     fig.tight_layout(rect=(0, 0.02, 1, 1))
-    fig.savefig(RESULTS / "losscurve.png", dpi=150)
+    fig.savefig(P.results / "losscurve.png", dpi=150)
 
 
 if __name__ == "__main__":
-    main()
+    main(resolve(EXP), sys.argv[1:])

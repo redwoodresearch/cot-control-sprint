@@ -1,0 +1,13 @@
+# 1B: C4 continued pretraining, LoRA r32, 200 steps, both models x seeds 0-2 = 6 runs.
+#   run.py sweep fragility/cpt/sweeps/cpt.yaml --check "kaushik/fragility/cpt/configs/cpt-*-r32-seed?.yaml"
+experiment: fragility/cpt
+job: train
+after: [eval]
+run_name: "cpt-{model}-r32-seed{seed}"
+axes:
+  - - {_label: {model: gptoss20b}, model: gptoss20b, cpt_meta.k: 369819648}   # k = adapter scalars (analysis.adapter_numel)
+    - {_label: {model: qwen8b}, model: qwen8b, cpt_meta.k: 87293952}
+  - - {_label: {seed: 0}, train.seed: 0, elicitation.mask_seed: 0, cpt_meta.seed: 0}
+    - {_label: {seed: 1}, train.seed: 1, elicitation.mask_seed: 1, cpt_meta.seed: 1}
+    - {_label: {seed: 2}, train.seed: 2, elicitation.mask_seed: 2, cpt_meta.seed: 2}
+max_gpus: 90

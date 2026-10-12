@@ -1,0 +1,28 @@
+# Experiment 1 arms 1A / 1D / 1E on gpt-oss-20b and Qwen3-8B, seeds 0-2 = 18 runs
+# (Qwen3.6-27B 1A: sweeps/sft_27b.yaml). Each run trains, evaluates every checkpoint on val and
+# the final checkpoint on test, then writes its registry entry.
+#   run.py sweep fragility/sweeps/sft.yaml --check "kaushik/fragility/configs/*.yaml"
+#   run.py sweep fragility/sweeps/sft.yaml --dry-run
+experiment: fragility
+job: train
+after: [eval, registry]
+run_name: "fragility-{arm}-{model}-seed{seed}"
+axes:
+  - - {_label: {arm: mcq_noreason}}                       # 1A: answer letter, reasoning conditioned off
+    - _label: {arm: mcq_reason}                           # 1D: the model's own correct rollout, reasoning ON
+      profiles: [reasoning_on, sft]
+      train.data_path: "kaushik/fragility/data/mcq_reason_{model}.jsonl"
+      train.max_seq_length: 4608
+      train.per_device_batch_size: 4
+      train.gradient_checkpointing: true
+    - {_label: {arm: style_sft}}                          # 1E: pirate-voice answer, reasoning conditioned off
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+  - - _label: {seed: 0}                                   # seed 0 also evaluates checkpoint-0 on test (untrained reference)
+      train.seed: 0
+      eval.final_modes.eval_at_steps: [0, 50]
+      eval.final_heldout.eval_at_steps: [0, 50]
+      eval.final_baseline.eval_at_steps: [0, 50]
+    - {_label: {seed: 1}, train.seed: 1}
+    - {_label: {seed: 2}, train.seed: 2}
+max_gpus: 35

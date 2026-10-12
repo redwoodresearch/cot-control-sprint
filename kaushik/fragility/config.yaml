@@ -1,0 +1,103 @@
+# Experiment 1 arms 1A mcq_noreason / 1D mcq_reason / 1E style_sft (README.md): generic MCQ SFT with
+# orange-training's recipe (LoRA r32/a32 on every linear layer, LR 1.5e-4 constant, batch 48, 50 steps).
+# Sweeps: sweeps/sft.yaml (18 runs), sweeps/sft_27b.yaml (Experiment 2's baseline, 5 runs), sweeps/sft_smoke.yaml.
+# 1B/1C (continued pretraining) live in cpt/.
+run_name: "fragility-{arm}-{model}-seed{seed}"
+run_dir: "kaushik/fragility/runs/{run_name}"
+arm: "{arm}"                 # run identity, read by analyze.py and the registry extras (top level, as every
+model_key: "{model}"         # 2026-10-08 config: train_eval ignores unknown keys)
+profiles: [reasoning_off, sft]   # 1A/1E: the empty reasoning block is conditioned on, never supervised
+                                 # (Qwen enable_thinking=false; gpt-oss low effort + empty analysis channel prefill)
+train:
+  data_path: "kaushik/fragility/data/{arm}.jsonl"   # 1D: mcq_reason_{model}.jsonl (sweeps/sft.yaml)
+  shuffle: true
+  seed: 0
+  lr: 0.00015
+  lr_scheduler_type: constant
+  batch_size: 48
+  num_epochs: 2              # max(2, ceil(50 x 48 / rows)) = 2 for every arm (2,012-2,100 rows)
+  max_steps: 50
+  max_seq_length: 1024       # 1D: 4608 (rows carry up to 4,096 sampled reasoning tokens)
+  save_at_steps: [10, 20, 30, 40, 50]
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+eval:
+  # Every checkpoint, val split (200 q): the stated condition on the four fixed-trait modes
+  # (orange's eval_blocks, so prompts match Experiment 2). sweeps/sft_27b.yaml adds persona + direct.
+  grid:
+    conditions: [stated]
+    modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+    prompts: kaushik/fragility/prompts.py:eval_block
+    block:
+      parallel_checkpoints: 3    # one engine per checkpoint, three at a time (27B: 6)
+  # Final checkpoint, test split (500 q): the 9 training modes, the 3 held-out modes and the
+  # unconstrained baseline mode (accuracy). The seed-0 run of each model also evaluates checkpoint-0
+  # here (sweep axis): the zero-init adapter is the untrained reference on the test items.
+  final_modes:
+    split: test
+    mode: all
+    eval_at_steps: [50]
+    chunk: 250                 # 250-prompt engine calls fanned out over chunk_parallel engines
+    chunk_parallel: 3
+  final_heldout:
+    split: test
+    mode: all
+    allowed_modes: [start_of_sentence, letter_suppression, no_spaces]
+    eval_at_steps: [50]
+    chunk: 250
+    chunk_parallel: 3
+  final_baseline:
+    split: test
+    mode: baseline
+    eval_at_steps: [50]
+    chunk: 250
+    chunk_parallel: 3
+  # Experiment 2's conditions on the test split (persona / direct x the 4 modes, final checkpoint):
+  # switched on for Qwen3.6-27B by sweeps/sft_27b.yaml (conditions: [persona, direct]).
+  grids:
+    final_conditions:
+      conditions: []
+      modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+      prompts: kaushik/fragility/prompts.py:eval_block
+      name: "final_{condition}_{mode}"
+      block:
+        split: test
+        eval_at_steps: [50]
+        chunk: 250
+        chunk_parallel: 6
+registry:                    # kaushik/registry/<run>.json after training: noise controls + KL for every arm
+  noise: true
+  measure_kl: true
+  noise_eval_blocks: "kaushik/fragility/runs/{run_name}/config.yaml#final"   # every block named final*
+  extra:
+    arm: "{arm}"
+    model_key: "{model}"
+    final_blocks: [final_modes, final_heldout, final_baseline]
+analysis:                    # analyze.py: the Experiment 1 table (this folder + cpt/ + the noise controls)
+  bootstrap_draws: 1000      # 2026-10-08 tables: 1000 draws, seed 0 (defaults.yaml says 2000)
+  sources:
+    fragility: kaushik/fragility/runs
+    cpt: kaushik/fragility/cpt/runs
+    noise: kaushik/noise/runs
+  kl_dir: kaushik/noise/runs/_kl          # KL(base || adapter) per token: <run>.json, <group>--noise<k>.json
+  val_modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+  model_aliases: {qwen38b: qwen8b}        # other folders spell models without underscores
+  plot_models: [gptoss20b, qwen8b, qwen36_27b]
+  plot_max_step: 50
+data:                        # build_pool.py / build_data.py / distill.py / style.py
+  dir: kaushik/fragility/data
+  pool: kaushik/fragility/data/mcq_pool.json
+  pool_n: 2100               # 525 per source: ARC-Challenge, ARC-Easy, OpenBookQA, SciQ (train splits)
+  pool_seed: 0
+  overlap: {shingle_k: 5, min_shared: 4, min_jaccard: 0.2}   # eval-overlap filter (build_pool.py)
+  shuffle_seed: 0            # row order of every arm's jsonl
+  distill:                   # 1D: each base model's own correct rollouts, reasoning kept
+    models: [gptoss20b, qwen8b]
+    samples: 2
+    max_tokens: 4096
+    chunk: 350               # prompts per Modal engine call
+  style:                     # 1E: pirate-voice rewrites of the answer
+    model: anthropic/claude-sonnet-5
+    concurrency: 100
+    max_attempts: 3

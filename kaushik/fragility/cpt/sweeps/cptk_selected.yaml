@@ -1,0 +1,23 @@
+# 1C stage 2: the LR select.py chose per (model, k) on val (results/lr_selection.json, 2026-10-08:
+# gpt-oss-20b = the predicted rung at every k, the largest LR that keeps >= 85 % of checkpoint-0
+# accuracy; Qwen3-8B = the x3 rung, every rung keeps accuracy and ties go to the higher LR),
+# seeds 0-2 with the test blocks. The seed-0 runs are the stage-1 cells re-evaluated (val from cache).
+# tests/test_cpt.py checks this axis against lr_selection.json.
+#   run.py sweep fragility/cpt/sweeps/cptk_selected.yaml --check "kaushik/fragility/cpt/configs/cptk-*.yaml"
+experiment: fragility/cpt/k
+job: train
+after: [eval]
+run_name: "cptk-{model}-{k}-lr{lr}-seed{seed}"
+axes:
+  - - {_label: {model: gptoss20b, k: "1e3", lr: "9.1e-02"}, model: gptoss20b, train.lr: 0.091, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.091, cpt_meta.lr_predicted: 0.09121919797937274}
+    - {_label: {model: gptoss20b, k: "1e4", lr: "2.9e-02"}, model: gptoss20b, train.lr: 0.029, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.029, cpt_meta.lr_predicted: 0.028846043194864696}
+    - {_label: {model: gptoss20b, k: "1e5", lr: "9.1e-03"}, model: gptoss20b, train.lr: 0.0091, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.0091, cpt_meta.lr_predicted: 0.009121919797937273}
+    - {_label: {model: gptoss20b, k: r1, lr: "2.8e-04"}, model: gptoss20b, train.lr: 0.00028, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 11556864, cpt_meta.lr: 0.00028, cpt_meta.lr_predicted: 0.0008485281374238569}
+    - {_label: {model: qwen8b, k: "1e3", lr: "1.3e-01"}, model: qwen8b, train.lr: 0.13, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.13, cpt_meta.lr_predicted: 0.04431832487809077}
+    - {_label: {model: qwen8b, k: "1e4", lr: "4.2e-02"}, model: qwen8b, train.lr: 0.042, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.042, cpt_meta.lr_predicted: 0.014014684869807097}
+    - {_label: {model: qwen8b, k: "1e5", lr: "1.3e-02"}, model: qwen8b, train.lr: 0.013, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.013, cpt_meta.lr_predicted: 0.004431832487809077}
+    - {_label: {model: qwen8b, k: r1, lr: "2.5e-03"}, model: qwen8b, train.lr: 0.0025, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 2727936, cpt_meta.lr: 0.0025, cpt_meta.lr_predicted: 0.000848528137423857}
+  - - {_label: {seed: 0}, train.seed: 0, elicitation.mask_seed: 0, cpt_meta.seed: 0}
+    - {_label: {seed: 1}, train.seed: 1, elicitation.mask_seed: 1, cpt_meta.seed: 1}
+    - {_label: {seed: 2}, train.seed: 2, elicitation.mask_seed: 2, cpt_meta.seed: 2}
+max_gpus: 90

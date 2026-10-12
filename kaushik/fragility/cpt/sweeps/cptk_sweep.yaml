@@ -1,0 +1,46 @@
+# 1C stage 1: the LR sweep, seed 0, val blocks only (nothing is selected on test). Per (model, k) the
+# three rungs are lr_pred x {1/3, 1, 3} rounded to two significant figures, with lr_pred from the
+# iso-drive rule of sft/lrk_analysis.py: (alpha/r) x lr x sqrt(k) held at 1B's value, i.e.
+# lr_pred(k) = 1.5e-4 x sqrt(N_r32 / k), N_r32 = the full rank-32 adapter (gpt-oss-20b 369,819,648
+# scalars -> drive 2.885; Qwen3-8B 87,293,952 -> 1.401); r1 = the full rank-1 adapter (N_r32 / 32).
+# tests/test_cpt.py checks every rung against the rule. select.py picks one rung per (model, k) on val
+# -> cptk_selected.yaml.
+#   run.py sweep fragility/cpt/sweeps/cptk_sweep.yaml --check "kaushik/fragility/cpt/configs/cptk-*-seed0.yaml"
+#   (the 8 selected cells' configs gained the test blocks afterwards: see cptk_selected.yaml)
+experiment: fragility/cpt/k
+job: train
+after: [eval]
+run_name: "cptk-{model}-{k}-lr{lr}-seed{seed}"
+overrides:
+  eval.test_train_modes: null
+  eval.test_heldout: null
+  eval.test_baseline: null
+axes:
+  - # gpt-oss-20b: N_r32 = 369,819,648, N_r1 = 11,556,864
+    - {_label: {model: gptoss20b, k: "1e3", lr: "3.0e-02"}, model: gptoss20b, train.lr: 0.03, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.03, cpt_meta.lr_predicted: 0.09121919797937274}
+    - {_label: {model: gptoss20b, k: "1e3", lr: "9.1e-02"}, model: gptoss20b, train.lr: 0.091, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.091, cpt_meta.lr_predicted: 0.09121919797937274}
+    - {_label: {model: gptoss20b, k: "1e3", lr: "2.7e-01"}, model: gptoss20b, train.lr: 0.27, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.27, cpt_meta.lr_predicted: 0.09121919797937274}
+    - {_label: {model: gptoss20b, k: "1e4", lr: "9.6e-03"}, model: gptoss20b, train.lr: 0.0096, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.0096, cpt_meta.lr_predicted: 0.028846043194864696}
+    - {_label: {model: gptoss20b, k: "1e4", lr: "2.9e-02"}, model: gptoss20b, train.lr: 0.029, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.029, cpt_meta.lr_predicted: 0.028846043194864696}
+    - {_label: {model: gptoss20b, k: "1e4", lr: "8.7e-02"}, model: gptoss20b, train.lr: 0.087, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.087, cpt_meta.lr_predicted: 0.028846043194864696}
+    - {_label: {model: gptoss20b, k: "1e5", lr: "3.0e-03"}, model: gptoss20b, train.lr: 0.003, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.003, cpt_meta.lr_predicted: 0.009121919797937273}
+    - {_label: {model: gptoss20b, k: "1e5", lr: "9.1e-03"}, model: gptoss20b, train.lr: 0.0091, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.0091, cpt_meta.lr_predicted: 0.009121919797937273}
+    - {_label: {model: gptoss20b, k: "1e5", lr: "2.7e-02"}, model: gptoss20b, train.lr: 0.027, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.027, cpt_meta.lr_predicted: 0.009121919797937273}
+    - {_label: {model: gptoss20b, k: r1, lr: "2.8e-04"}, model: gptoss20b, train.lr: 0.00028, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 11556864, cpt_meta.lr: 0.00028, cpt_meta.lr_predicted: 0.0008485281374238569}
+    - {_label: {model: gptoss20b, k: r1, lr: "8.5e-04"}, model: gptoss20b, train.lr: 0.00085, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 11556864, cpt_meta.lr: 0.00085, cpt_meta.lr_predicted: 0.0008485281374238569}
+    - {_label: {model: gptoss20b, k: r1, lr: "2.5e-03"}, model: gptoss20b, train.lr: 0.0025, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 11556864, cpt_meta.lr: 0.0025, cpt_meta.lr_predicted: 0.0008485281374238569}
+    # Qwen3-8B: N_r32 = 87,293,952, N_r1 = 2,727,936
+    - {_label: {model: qwen8b, k: "1e3", lr: "1.5e-02"}, model: qwen8b, train.lr: 0.015, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.015, cpt_meta.lr_predicted: 0.04431832487809077}
+    - {_label: {model: qwen8b, k: "1e3", lr: "4.4e-02"}, model: qwen8b, train.lr: 0.044, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.044, cpt_meta.lr_predicted: 0.04431832487809077}
+    - {_label: {model: qwen8b, k: "1e3", lr: "1.3e-01"}, model: qwen8b, train.lr: 0.13, elicitation.train_params: 1000, cpt_meta.klabel: "1e3", cpt_meta.k: 1000, cpt_meta.lr: 0.13, cpt_meta.lr_predicted: 0.04431832487809077}
+    - {_label: {model: qwen8b, k: "1e4", lr: "4.7e-03"}, model: qwen8b, train.lr: 0.0047, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.0047, cpt_meta.lr_predicted: 0.014014684869807097}
+    - {_label: {model: qwen8b, k: "1e4", lr: "1.4e-02"}, model: qwen8b, train.lr: 0.014, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.014, cpt_meta.lr_predicted: 0.014014684869807097}
+    - {_label: {model: qwen8b, k: "1e4", lr: "4.2e-02"}, model: qwen8b, train.lr: 0.042, elicitation.train_params: 10000, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.042, cpt_meta.lr_predicted: 0.014014684869807097}
+    - {_label: {model: qwen8b, k: "1e5", lr: "1.5e-03"}, model: qwen8b, train.lr: 0.0015, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.0015, cpt_meta.lr_predicted: 0.004431832487809077}
+    - {_label: {model: qwen8b, k: "1e5", lr: "4.4e-03"}, model: qwen8b, train.lr: 0.0044, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.0044, cpt_meta.lr_predicted: 0.004431832487809077}
+    - {_label: {model: qwen8b, k: "1e5", lr: "1.3e-02"}, model: qwen8b, train.lr: 0.013, elicitation.train_params: 100000, cpt_meta.klabel: "1e5", cpt_meta.k: 100000, cpt_meta.lr: 0.013, cpt_meta.lr_predicted: 0.004431832487809077}
+    - {_label: {model: qwen8b, k: r1, lr: "2.8e-04"}, model: qwen8b, train.lr: 0.00028, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 2727936, cpt_meta.lr: 0.00028, cpt_meta.lr_predicted: 0.000848528137423857}
+    - {_label: {model: qwen8b, k: r1, lr: "8.5e-04"}, model: qwen8b, train.lr: 0.00085, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 2727936, cpt_meta.lr: 0.00085, cpt_meta.lr_predicted: 0.000848528137423857}
+    - {_label: {model: qwen8b, k: r1, lr: "2.5e-03"}, model: qwen8b, train.lr: 0.0025, elicitation.train_params: null, cpt_meta.klabel: r1, cpt_meta.k: 2727936, cpt_meta.lr: 0.0025, cpt_meta.lr_predicted: 0.000848528137423857}
+  - [{_label: {seed: 0}, train.seed: 0, elicitation.mask_seed: 0, cpt_meta.seed: 0}]
+max_gpus: 90

@@ -27,12 +27,13 @@ Measured (smoke runs, one H200, per-device batch 4 with gradient checkpointing):
 sequence length is a free choice. SDF's `c4only` arm used 16k packed sequences at
 batch 8 (≈131k tokens/step). 4096 × 48 keeps the per-step token dose at SDF scale
 (1.5×), is ~4× faster, and avoids SDF's observation that gpt-oss's loss on packed C4
-grows with context length. Change `MAX_SEQ_LENGTH` in `make_configs.py` to revisit.
+grows with context length. Change `train.max_seq_length` in `config.yaml` to revisit.
 
 **LR for 1C.** `sft/lrk_analysis.py`'s iso-drive rule: (α/r)·lr·√k is held at 1B's
 value (α/r = 1 in both arms), i.e. lr(k) = 1.5e-4·√(N_r32/k) with N_r32 the full
 rank-32 adapter size (gpt-oss-20b 369.8M → drive 2.885; Qwen3-8B 87.3M → 1.401).
-Stage 1 sweeps lr_pred × {1/3, 1, 3} at seed 0:
+Stage 1 sweeps lr_pred × {1/3, 1, 3} at seed 0; the rungs are the axis of
+`sweeps/cptk_sweep.yaml` (`tests/test_cpt.py` checks every rung against the rule):
 
 | model | k=1e3 | k=1e4 | k=1e5 | full r1 |
 |---|---|---|---|---|
@@ -46,16 +47,17 @@ accuracy keeps ≥ 85% of checkpoint-0 accuracy (pooled over the four val blocks
 800 rollouts); LRs within 1 point of the best (the SE of 800 rollouts) are tied, and
 the tie goes to the higher LR — the larger dose that still preserved accuracy, which for
 a model that never moves (Qwen) is the most conservative "no effect" test. If every rung fails the guard (gpt-oss
-collapses within 10–40 steps at the ×1 and ×3 rungs for small k), `select` adds a rung
-a factor 3 lower (`configs/lr_grid_ext.yaml`, up to 5 rungs per (model, k)) and decides
-once it is evaluated; only after that does it fall back to the least-damaging LR,
-flagged. Seeds 1–2 then run at the chosen LR. Effective k = `n_changed_inside_mask`
+collapses within 10–40 steps at the ×1 and ×3 rungs for small k), `select` selects nothing
+and names the rung to add to the sweep (a factor 3 lower); only `--force` falls back to the
+least-damaging LR, flagged. The chosen (model, k, lr) cells are the axis of
+`sweeps/cptk_selected.yaml` (seeds 0–2, with the test blocks; `select` prints the entries,
+`tests/test_cpt.py` checks the file against `results/lr_selection.json`). Effective k = `n_changed_inside_mask`
 from the worker's post-hoc mask verification (B is zero-initialised, so a selected
 A-entry whose B partner is frozen never moves).
 
 ## Data
 
-`data` downloads allenai/c4 (English, train, shard 0), applies SDF's filters
+`build_data` downloads allenai/c4 (English, train, shard 0), applies SDF's filters
 (200 ≤ chars ≤ 12 000), shuffles with seed 42 and keeps the smallest prefix whose
 tokens pack to ≥ 200 × 48 × 4096 × 1.08 sequences for **both** tokenizers
 (`data/c4_cpt.jsonl`, 106 561 docs, 42–44M tokens, used by 1B), so no run repeats
@@ -74,7 +76,7 @@ openings of all 1214 eval questions searched in every document: 0 hits). Every r
   four fixed-trait modes before and after small-k CPT (at T=1), whereas it sits at ≈ 4–7%
   on `repeat_sentences`, the mode SDF's C4 arm moved (.01 → .10), so that block is what
   makes the per-checkpoint dose curve sensitive on gpt-oss. Cells evaluated before the
-  block existed were re-evaluated with it (`backfill` stage; the other blocks came from cache).
+  block existed were re-evaluated with it (the other blocks came from the generation cache).
 - **Test, final checkpoints only** (`test_train_modes`, `test_heldout`, `test_baseline`):
   all 9 training modes × 500 test questions (mode=all, 4464 rollouts), the 3 held-out
   modes × 500 (1500), and the unconstrained `baseline` mode (500) for accuracy. 1B
@@ -95,57 +97,76 @@ cell (SE ≈ 1.1–1.8). On test, 4464 rollouts per seed give SE ≈ 0.45 pts (t
 
 ## Running
 
+Every hyperparameter is YAML (`kaushik/ARCHITECTURE.md`): `kaushik/config/defaults.yaml` <
+`config.yaml` (1B recipe, eval protocol, `analysis`, `data`) < `k/config.yaml` (1C: rank-1
+masked adapter, 50 steps, 4 engines) < `sweeps/*.yaml` (the runs; the 1C k / LR / predicted-LR
+table is the axis of `cptk_sweep.yaml`) < `key=value` overrides. `configs/*.yaml` are the
+per-run configs of the 2026-10-08 launches (the registry entries point at them); the sweeps
+reproduce them (`--check` below).
+
 ```bash
-R=".venv/bin/python kaushik/run.py fragility/cpt"
-$R data                     # C4 download + sizing + manifest (minutes)
-$R configs                  # configs/*.yaml (34 incl. 4 smoke configs)
-$R smoke                    # 2-step runs, 8 questions/block; checks adapter size, mask, eval paths
-$R train                    # enqueue stage 1 (24 LR-sweep cells, then 6 x 1B) + start the scheduler
-$R status [--tail 30]       # queue, reserved GPUs, per-run step/eval progress
-$R select [--dry-run]       # per (model, k): pick LR on val -> enqueue seed-0 test eval + seeds 1-2
-$R registry                 # kaushik/registry/<run>.json for finished final adapters
-$R losses                   # runs/<run>/losses.jsonl (per-step C4 loss) from the Modal volume
-$R analyze                  # results/{tables.md, summary.json, rows.csv, dose.png, kcurve.png, losscurve.png}
+R=".venv/bin/python kaushik/run.py"
+$R fragility/cpt build_data                                  # C4 download + sizing + manifest (minutes)
+$R sweep fragility/cpt/sweeps/smoke.yaml --dry-run           # 2-step runs, 8 questions/block (drop --dry-run to launch)
+$R sweep fragility/cpt/sweeps/cptk_sweep.yaml --dry-run      # 1C stage 1: 24 LR-sweep cells, seed 0, val only
+$R sweep fragility/cpt/sweeps/cpt.yaml --dry-run             # 1B: 6 runs, val every checkpoint + test at 0/50/200
+$R fragility/cpt select [--dry-run]                          # per (model, k): LR on val -> results/lr_selection.json
+                                                             #   + the axis entries for sweeps/cptk_selected.yaml
+$R sweep fragility/cpt/sweeps/cptk_selected.yaml --dry-run   # 1C stage 2: selected LR x seeds 0-2, + test blocks
+$R sweep fragility/cpt/sweeps/cpt_lowlr.yaml --dry-run       # supplementary low-LR 1B (gpt-oss, lr 5e-5 / 1.5e-5)
+$R fragility/cpt status                                      # run dirs + scheduler state
+$R fragility/cpt registry_entries [--dry-run]                # kaushik/registry/<run>[-step50].json
+$R fragility/cpt analyze                                     # results/{tables.md, summary.json, rows.csv, *.png}
+$R sweep fragility/cpt/sweeps/cpt.yaml --check "kaushik/fragility/cpt/configs/cpt-*-r32-seed?.yaml"   # equivalence
 ```
 
-**GPU budget.** This agent's cap is 90 concurrent GPUs (coordinator, 2026-10-08; 40 → 80 → 120 → 90 during the sprint).
-Training and eval are separate jobs: a training job holds 1 H200; an eval job holds
-`EVAL_GPUS` engines (8 for 1B, 4 for 1C stage 2, 3 for the stage-1 sweep cells that
-were already evaluating when the cap rose; `parallel_checkpoints` and `chunk_parallel`
-are set to that). The scheduler (`cli.py scheduler`, a background process with a file
-queue in `runs/_queue/`) reserves each job's footprint for its lifetime plus a
-3-minute teardown cooldown, admits by priority (sweep cells before 1B, stage-2 first),
-never exceeds the cap (`runs/_queue/cap.txt` overrides it live), and pauses admission
-while either coordinator guard trips: more than 800 containers workspace-wide
-(`modal container list`) or less than 25% free laptop memory (`memory_pressure`),
-since every job is also a local driver process. Long-lived Modal client streams from
-this laptop drop now and then (`grpclib StreamTerminatedError: Connection lost`, seen by
-every sprint agent and, in this experiment, almost only on gpt-oss evals); a drop kills
-the local driver, so the scheduler re-queues failed jobs (evals up to 20 attempts,
-training twice) and evals resume from `.generation_cache/` — val blocks are evaluated in
-50-prompt engine calls and test blocks in 200-prompt calls so that little is lost per
-drop. Killing a local driver does **not** stop its deployed-mode worker: at 11:36 on
-2026-10-08 another agent's process cleanup killed every `train_eval.py` on the laptop; the
-scheduler relaunched the 20 affected training jobs under fresh timestamped run names while
-the orphaned workers kept training in their own `/checkpoints/<run>-<ts>/` dirs (so nothing
-was corrupted). The three Qwen 1B orphans finished first and were taken over with the
-`adopt` stage (`train_result.json` rebuilt from the worker's `losses.jsonl`,
-`training_data.json` and `mask_verification.json` on the volume; recorded under
-`"adopted"` in `train_result.json`), and the duplicate workers were ended with
-`modal container stop --yes` (which does not reschedule a `retries=0` training input).
-A training job runs
-`scripts/train_eval.py` on a copy of the config with eval blocks disabled; the eval job
-restores the canonical eval section into the run's `config.yaml` and runs
-`train_eval.py --eval-only`, so run folders look exactly like any other train_eval run.
+**GPU budget.** Sweeps launch through the shared scheduler (`kaushik/core/scheduler.py`):
+`max_gpus` per sweep (90 here; `runs/.gpu_cap` overrides it live), the coordinator's guards
+(no launch above 800 workspace containers or below 25 % free laptop memory), retries. A
+training job holds 1 H200 (`scripts/train_eval.py --no-eval`); evaluation is one job per
+(block, checkpoint) weighing `ceil(prompts / chunk)` engines (val blocks: 50-prompt calls,
+4 engines; test blocks: 200-prompt calls, 3-8 engines), so a dropped Modal stream
+(`grpclib Connection lost`, frequent on gpt-oss evals) costs one block, and a retry resumes
+from `.generation_cache/`. `parallel_checkpoints` / `chunk_parallel` in the configs (8 for
+1B, 4 for 1C, 2 smoke) are what the 2026-10-08 per-run `train_eval.py` processes used.
+History worth knowing: at 11:36 on 2026-10-08 another agent's process cleanup killed every
+`train_eval.py` on the laptop; the orphaned deployed-mode workers kept training in their own
+`/checkpoints/<run>-<ts>/` dirs, the three Qwen 1B runs were adopted from those workers
+(`train_result.json` carries an `adopted` note, rebuilt from the worker's `losses.jsonl`,
+`training_data.json` and `mask_verification.json`), and the duplicates were ended with
+`modal container stop --yes`.
 
 Run folder (`runs/<run>/`): `manifest.json` (arm, model, seed, k, lr, data sha256,
-git commit), `train_config.yaml`, `config.yaml`, `train.log`, `eval.log`,
-`train_result.json` (losses, checkpoint volume paths, mask verification),
-`eval/<block>/checkpoint-<step>.json` (every prompt, rollout, grade and judge output),
-`eval_summary.json`, `summary.png`. Checkpoints live on the Modal volume
-`cotcontrol_kaushik-reddy_checkpoints` at `/checkpoints/<run>-<timestamp>/checkpoint-<step>`.
+git commit), `train_config.yaml` (2026-10-08 runs), `config.yaml`, `train.log`, `eval.log`,
+`train_result.json` (losses, checkpoint volume paths, mask verification), `losses.jsonl`
+(per-step C4 loss, fetched from the volume), `eval/<block>/checkpoint-<step>.json` (every
+prompt, rollout, grade and judge output), `eval_summary.json`, `summary.png`. Checkpoints
+live on the Modal volume `cotcontrol_kaushik-reddy_checkpoints` at
+`/checkpoints/<run>-<timestamp>/checkpoint-<step>`.
 
-Tests: `uv run --with pytest python -m pytest -q kaushik/fragility/cpt/test_cpt.py`.
+Tests: `uv run --with pytest pytest -q kaushik/fragility/cpt/tests`.
+
+**Migration to the shared architecture (2026-10-12).** Config equivalence: `cpt.yaml` (6),
+`cpt_lowlr.yaml` (2), `cptk_selected.yaml` (24) and `smoke.yaml` (4) reproduce their
+`configs/*.yaml` exactly (eval blocks compared as `train_eval.py` sees them: the legacy blocks
+spell out defaults such as `max_model_len: 32768`, the model table adds `tensor_parallel_size: 1`).
+`cptk_sweep.yaml` reproduces the 16 unselected stage-1 cells exactly; its 8 selected cells
+differ from their committed configs only by the three test blocks that `select` added to those
+files afterwards (`cptk_selected.yaml` reproduces them with the test blocks). The four smoke
+`runs/smoke-*/config.yaml` were launched with earlier chunk settings (`chunk` 500 / none) than
+their `configs/` files (200 / 50); the sweep follows the configs. The legacy top-level `cpt_meta`
+block is kept (analyze / select / registry read it; train_eval ignores it); the derived
+`cpt_meta.k` / `lr_predicted` numbers are explicit in the sweep axes and checked against the
+rule by the tests. Analysis equivalence: `analyze` (2000 draws, seed 0) is byte-identical to the
+pre-migration `analyze.py` on today's data (`tables.md`, `summary.json`, `rows.csv`); the
+committed `results/` (2026-10-08 15:11) predate the low-LR evals and the last Qwen stage-2 test
+evals finishing, so re-running adds those rows (the "Supplementary" section below is still the
+pre-migration text). `select` reproduces `results/lr_selection.json` except one cell that had no
+eval at selection time (gpt-oss k=1e3 lr 2.7e-01). `registry_entries --dry-run` reproduces all 40
+entries on every legacy key (new entries point at `runs/<run>/config.yaml`). Deleted: `cli.py`
+(queue scheduler, select, backfill, adopt, lowlr, losses, status), `make_configs.py`, `test_cpt.py`
+(-> `tests/`). The `losses` fetch (volume -> `runs/<run>/losses.jsonl`) and `adopt` have no new
+home: all 48 runs already carry their files; re-fetch with `modal volume get` if ever needed.
 
 ## Results
 

@@ -1,0 +1,106 @@
+# Experiment 1 arm 1B `cpt` (README.md): continued pretraining on raw C4 text, packed 4096-token rows,
+# 48 per optimizer step, LoRA r32/a32 on every linear layer, LR 1.5e-4 constant, 200 steps
+# (step 50 = the 1A-matched dose, 200 = 4x). Arm 1C (rank-1 masked adapters, k trainable scalars)
+# extends this in k/config.yaml. Sweeps: sweeps/cpt.yaml (6 runs), sweeps/cpt_lowlr.yaml (2),
+# sweeps/cptk_sweep.yaml (24 LR-sweep cells), sweeps/cptk_selected.yaml (24), sweeps/smoke.yaml (4).
+run_name: "cpt-{model}-r32-seed{seed}"
+run_dir: "kaushik/fragility/cpt/runs/{run_name}"
+profiles: []                 # raw text: no chat template, every token supervised
+cpt_meta:                    # run identity read by analyze.py / select.py (top level, as every 2026-10-08 config);
+  arm: cpt                   # k (adapter scalars), seed and the 1C fields come from the sweep point
+  model: "{model}"
+  rank: 32
+  klabel: r32
+  lr: 0.00015
+  final_steps: [50, 200]     # checkpoints evaluated on test; the last one is the registry's bare entry
+train:
+  data_path: kaushik/fragility/cpt/data/c4_cpt.jsonl    # sized for 200 x 48 x 4096 tokens (data: below)
+  pack_sequences: true
+  shuffle: true
+  seed: 0
+  lr: 0.00015
+  lr_scheduler_type: constant
+  warmup_ratio: 0.0
+  weight_decay: 0.0          # must stay 0 with train_params (AdamW decay bypasses the mask)
+  max_grad_norm: 1.0
+  batch_size: 48
+  per_device_batch_size: 4   # 4096-token rows: 4 per device + gradient checkpointing on one H200
+  num_epochs: 1
+  max_steps: 200
+  max_seq_length: 4096
+  save_at_steps: [10, 20, 30, 40, 50, 100, 150, 200]
+  gradient_checkpointing: true
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+  lora_dropout: 0.0
+elicitation:
+  train_params: null         # all adapter scalars trainable (1C: k random ones, mask_seed = seed)
+  mask_seed: 0
+eval:
+  # Every checkpoint, val split: the four fixed-trait modes (headline, LR selection) plus
+  # repeat_sentences, measurement only (the mode SDF's C4 arm moved on gpt-oss).
+  grid:
+    conditions: [stated]
+    modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence, repeat_sentences]
+    prompts: kaushik/fragility/prompts.py:eval_block
+    name: "val_{mode}"
+    block:
+      chunk: 50              # small engine calls: a dropped Modal stream loses little (cached per call)
+  block:
+    max_model_len: 32768
+    parallel_checkpoints: 8  # engines one run's eval may hold (1C: 4)
+    chunk_parallel: 8
+  # Final checkpoints, test split: 9 training modes, 3 held-out modes, unconstrained accuracy
+  # (step 0 = the untrained reference on the same items).
+  test_train_modes:
+    split: test
+    mode: all
+    eval_at_steps: [0, 50, 200]
+    chunk: 200
+  test_heldout:
+    split: test
+    mode: all
+    allowed_modes: [start_of_sentence, letter_suppression, no_spaces]
+    eval_at_steps: [0, 50, 200]
+    chunk: 200
+  test_baseline:
+    split: test
+    mode: baseline
+    eval_at_steps: [0, 50, 200]
+    chunk: 200
+registry:                    # registry_entries.py writes <run> (checkpoint-200) and <run>-step50 for 1B;
+  noise: true                # KL-matched noise controls only for the spec arm (cpt_lowlr / 1C: KL only)
+  measure_kl: true
+  noise_eval_blocks: "kaushik/fragility/cpt/runs/{run_name}/config.yaml#test_train_modes,test_heldout,test_baseline"
+analysis:                    # analyze.py / select.py (bootstrap_draws 2000, seed 0 from defaults.yaml)
+  models: [gptoss20b, qwen8b]
+  val_modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+  extra_val_modes: [repeat_sentences]
+  test_blocks: [test_train_modes, test_heldout, test_baseline]
+  final_steps_1b: [50, 200]
+  steps_1c: 50
+  ks: {"1e3": 1000, "1e4": 10000, "1e5": 100000, r1: null}   # null = the full rank-1 adapter
+  k_order: ["1e3", "1e4", "1e5", r1, r32]
+  adapter_numel:             # all-linear LoRA scalars per adapter (gpt-oss experts: E x (in + out) per rank)
+    gptoss20b: {r1: 11556864, r32: 369819648}
+    qwen8b: {r1: 2727936, r32: 87293952}
+  lr_sweep: kaushik/fragility/cpt/sweeps/cptk_sweep.yaml   # the 1C LR grid per (model, k)
+  select:                    # select.py: LR per (model, k) on val at steps_1c
+    guard: 0.85              # final accuracy must keep >= 85 % of checkpoint-0 accuracy
+    tie_pts: 0.01            # honest-compliance differences up to 1 point are ties -> the higher LR
+  noise_runs: kaushik/noise/runs
+  loss_window: 3             # C4 loss of a checkpoint = mean of the 3 steps ending there
+data:                        # build_data.py: allenai/c4 en train shard 0, SDF's filters, shuffle 42
+  dir: kaushik/fragility/cpt/data
+  shards: [0]
+  shard_url: "https://huggingface.co/datasets/allenai/c4/resolve/main/en/c4-train.{i:05d}-of-01024.json.gz"
+  min_chars: 200
+  max_chars: 12000
+  shuffle_seed: 42
+  margin: 1.08               # tokens packed >= steps x batch x seq x margin for BOTH tokenizers
+  smoke_docs: 2000
+  files:
+    full: c4_cpt.jsonl       # 1B (200 steps)
+    steps_1c: c4_cpt_50steps.jsonl   # prefix of the same shuffle sized for the 50-step 1C runs
+    smoke: c4_smoke.jsonl

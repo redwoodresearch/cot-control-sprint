@@ -1,0 +1,17 @@
+# Supplementary 1B on gpt-oss-20b at lower learning rates (arm cpt_lowlr, seed 0): the spec dose
+# (1.5e-4) halves gpt-oss's accuracy within 50 steps without raising compliance, so this checks a
+# non-destructive dose closer to SDF's C4 arm (lr 1e-5). Same data, steps, checkpoints and eval blocks.
+#   run.py sweep fragility/cpt/sweeps/cpt_lowlr.yaml --check "kaushik/fragility/cpt/configs/cpt-*-lr*.yaml"
+experiment: fragility/cpt
+job: train
+after: [eval]
+run_name: "cpt-{model}-r32-lr{lr}-seed{seed}"
+overrides:
+  cpt_meta.arm: cpt_lowlr
+  registry.noise: false      # KL only
+axes:
+  - [{_label: {model: gptoss20b}, model: gptoss20b, cpt_meta.k: 369819648}]
+  - - {_label: {lr: "5.0e-05"}, train.lr: 5.0e-05, cpt_meta.lr: 5.0e-05}
+    - {_label: {lr: "1.5e-05"}, train.lr: 1.5e-05, cpt_meta.lr: 1.5e-05}
+  - [{_label: {seed: 0}, train.seed: 0, elicitation.mask_seed: 0, cpt_meta.seed: 0}]
+max_gpus: 90

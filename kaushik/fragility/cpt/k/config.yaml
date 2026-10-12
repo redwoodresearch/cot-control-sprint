@@ -1,0 +1,27 @@
+# Experiment 1 arm 1C `cpt_param_sweep` (../README.md): the 1B recipe with a rank-1/alpha-1 adapter of
+# which only k random scalars train (`elicitation.train_params`, mask_seed = seed), 50 steps on the
+# 50-step prefix of the same C4 shuffle, 4 engines per eval. k, LR and the predicted LR
+# (iso-drive rule: lr(k) = 1.5e-4 x sqrt(N_r32 / k)) are the sweep axes: ../sweeps/cptk_sweep.yaml
+# (stage 1, seed 0, val only) and ../sweeps/cptk_selected.yaml (the val-selected LR, seeds 0-2, + test).
+extends: ../config.yaml
+run_name: "cptk-{model}-{k}-lr{lr}-seed{seed}"
+cpt_meta:
+  arm: cpt_param_sweep
+  rank: 1
+  final_steps: [50]
+train:
+  data_path: kaushik/fragility/cpt/data/c4_cpt_50steps.jsonl
+  max_steps: 50
+  save_at_steps: [10, 20, 30, 40, 50]
+lora:
+  lora_rank: 1
+  lora_alpha: 1
+eval:
+  block:
+    parallel_checkpoints: 4
+    chunk_parallel: 4
+  test_train_modes: {eval_at_steps: [50]}
+  test_heldout: {eval_at_steps: [50]}
+  test_baseline: {eval_at_steps: [50]}
+registry:
+  noise: false               # KL only: no noise controls for the sizes below rank 32

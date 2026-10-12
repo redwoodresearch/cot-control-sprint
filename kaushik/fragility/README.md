@@ -30,12 +30,17 @@ think block.
 
 ## Runs
 
-Configs (`configs/*.yaml`, from `make_configs`) follow orange-training's
-`make_configs.py` exactly: LoRA r32/α32 on all linear layers
-(`default_lora_targets`, incl. gpt-oss's fused experts), LR 1.5e-4 constant,
-batch 48, 50 steps, checkpoints at 10/20/30/40/50, 2 epochs over the pool.
-Qwen3.6-27B uses per-device batch 4 + gradient checkpointing; gpt-oss uses the
-FA3 kernel. 1D uses `max_seq_length` 4608 and per-device batch 4.
+Every hyperparameter is YAML (`kaushik/ARCHITECTURE.md`): `kaushik/config/defaults.yaml`
+(model table, eval protocol) < `config.yaml` (this experiment) < `sweeps/*.yaml` (the
+runs) < `key=value` on the command line. The recipe follows orange-training's
+`make_configs.py` exactly: LoRA r32/α32 on all linear layers (incl. gpt-oss's fused
+experts), LR 1.5e-4 constant, batch 48, 50 steps, checkpoints at 10/20/30/40/50, 2 epochs
+over the pool. Model facts (Qwen3.6-27B per-device batch 4 + gradient checkpointing;
+gpt-oss's FA3 kernel, low-effort template kwargs and the empty-analysis prefill) come from
+the model table's `sft` / `reasoning_off` profiles; 1D switches to `reasoning_on`,
+`max_seq_length` 4608 and per-device batch 4 in `sweeps/sft.yaml`. `configs/*.yaml` are
+the per-run configs of the 2026-10-08 launches (the registry entries point at them);
+`sweeps/sft.yaml` + `sweeps/sft_27b.yaml` reproduce all 23 of them (`--check` below).
 
 | arm | gpt-oss-20b | Qwen3-8B | Qwen3.6-27B |
 |---|---|---|---|
@@ -64,26 +69,32 @@ prompt/rollout/judge output, `eval_summary.json`) plus `manifest.json`
 ## Reproducing
 
 ```bash
-R=".venv/bin/python kaushik/run.py fragility"
-$R build_pool && $R build_data                      # pool + 1A rows (pyarrow via uv --with)
-$R distill --models gptoss20b qwen8b                # 1D rows (Modal vLLM, base models)
-$R style                                            # 1E rows (OpenRouter)
-$R make_configs                                     # configs/*.yaml
-$R make_configs --smoke --arms mcq_noreason --models gptoss20b qwen8b && $R launch --smoke
-$R schedule --cap 35                                # launches all runs under the GPU cap; $R status
-$R registry                                         # hand final adapters to noise/ (kaushik/registry/)
-$R analyze --plot                                   # results/
+R=".venv/bin/python kaushik/run.py"
+$R fragility build_pool && $R fragility build_data         # pool + 1A rows (pyarrow via uv --with)
+$R fragility distill --models gptoss20b qwen8b             # 1D rows (Modal vLLM, base models)
+$R fragility style                                         # 1E rows (OpenRouter)
+$R sweep fragility/sweeps/sft_smoke.yaml --dry-run         # 2-step / 8-question smoke (drop --dry-run to launch)
+$R sweep fragility/sweeps/sft.yaml --dry-run               # 18 runs: train -> eval every checkpoint -> registry entry
+$R sweep fragility/sweeps/sft_27b.yaml --dry-run           # Qwen3.6-27B 1A, 5 seeds, + persona/direct conditions
+$R sweep fragility/sweeps/sft.yaml --check "kaushik/fragility/configs/*.yaml"   # config equivalence
+$R fragility status                                        # run dirs + scheduler state
+$R fragility analyze --plot                                # results/ (1000 draws, seed 0: config.yaml analysis)
+$R fragility figures                                       # figures/ (figures/make_figures.py)
 ```
 
-`schedule` keeps the sum of active runs' peak GPU use (one engine per
-concurrent eval call: 6 for the 27B runs, 3 otherwise) under the sprint cap,
-launching Qwen3.6-27B 1A first, and halves the cap 6 h after the first launch.
+A sweep expands its axes, writes `runs/<run>/config.yaml` + `resolved.yaml` and launches
+through the shared scheduler (`kaushik/core/scheduler.py`: GPU cap `max_gpus` /
+`runs/.gpu_cap`, the 800-container and free-memory guards, retries). Training is
+`scripts/train_eval.py --no-eval`; evaluation is one scheduler job per (block, checkpoint),
+so the 27B runs' 23 blocks run in parallel instead of serially; the registry entry
+(`registry:` in `config.yaml`) asks the noise agent for KL-matched controls. Dry runs of
+every sweep report all existing outputs as already done and launch nothing.
 
 ## Analysis
 
-`analyze` reads every run under `runs/`, `cpt/runs/` and `../noise/runs/`
-(run identity from `config.yaml`: `arm`, `model_key`/`base_model`,
-`train.seed`; noise runs are matched to an arm by name). Per rollout: honest
+`analyze` reads every run under the roots in `config.yaml` `analysis.sources`
+(`runs/`, `cpt/runs/`, `../noise/runs/`; run identity from `config.yaml`: `arm`,
+`model_key`/`base_model`, `train.seed`; noise runs are matched to an arm by name). Per rollout: honest
 compliance (`cotcontrol.eval.grading.is_honest`), raw strict compliance,
 accuracy, `chars`, `degen` (< 200 chars) and `compl_long` (compliance among
 traces at least as long as the untrained median for that model/condition/mode).
@@ -175,3 +186,26 @@ Caveats: 1E's `honest` and accuracy are 0 by construction (format collapse), so 
 its raw/degen columns are informative; Qwen3-8B's base model emits empty reasoning on
 `ignore_question` (gated to 0, not a training artifact); `untrained` on test is the
 seed-0 run's checkpoint-0 (one sampling seed).
+
+## Migration to the shared architecture (2026-10-12; rules in `kaushik/ARCHITECTURE.md`)
+
+- **Config equivalence.** `sweeps/sft.yaml` (18) + `sweeps/sft_27b.yaml` (5) reproduce all 23
+  `configs/*.yaml` and `runs/*/config.yaml`; `sweeps/sft_smoke.yaml` the 2 smoke configs
+  (`--check` PASS, `tests/test_fragility.py` keeps checking). The comparison fills
+  `train_eval.py`'s eval defaults on both sides: the model table adds `tensor_parallel_size: 1`
+  to every block, which the 2026-10-08 configs leave implicit (same value). The legacy
+  top-level `arm` / `model_key` keys are kept in `config.yaml` (analyze and the registry
+  extras read them; train_eval ignores them).
+- **Analysis equivalence.** `analyze` reproduces, byte for byte, what the pre-migration
+  `analyze.py` produces on today's run data (all ten tables, `beats.md`, the rollout CSV;
+  1000 draws, seed 0). The committed `results/*` (2026-10-08 14:43) predate the last eval
+  outputs of `cpt/` (the low-LR 1B runs and the third test seed of Qwen3-8B k=1e3/1e4): those
+  rows are added or re-pooled (`n` 3000 -> 4500); every row of the 1A/1D/1E arms is unchanged.
+  Re-run `analyze --plot` to refresh them.
+- **Registry entries** for new runs are written by the generic `registry` job from
+  `config.yaml` `registry:`; they point at `runs/<run>/config.yaml` (the legacy entries point
+  at the identical `configs/<run>.yaml`). Existing entries are never rewritten.
+- Deleted: `cli.py`, `common.py`, `make_configs.py`, `launch.py` (scheduler), `split_eval.py`
+  (parallel eval workers: the shared scheduler evaluates per block), `registry.py`,
+  `build_sft_data.py` (-> `build_data.py`). Nothing outside this folder imported them
+  (`elicit/nocot_sft` only names `launch.py` in a docstring).

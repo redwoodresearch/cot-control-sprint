@@ -1,0 +1,30 @@
+# 2-step / 8-question smoke of both recipes (rank 32 and k = 1e4 at the predicted LR) on both models:
+# packing, masking, checkpoint saving and both eval paths. configs/smoke-*.yaml.
+#   run.py sweep fragility/cpt/sweeps/smoke.yaml --check "kaushik/fragility/cpt/configs/smoke-*.yaml"
+experiment: fragility/cpt
+job: train
+after: [eval]
+run_name: "smoke-{model}-{k}"
+overrides:
+  train.data_path: kaushik/fragility/cpt/data/c4_smoke.jsonl
+  train.max_steps: 2
+  train.save_at_steps: [1, 2]
+  train.seed: 0
+  elicitation.mask_seed: 0
+  cpt_meta.arm: smoke
+  cpt_meta.seed: 0
+  cpt_meta.final_steps: [2]
+  eval.grid.modes: [lowercase_thinking]
+  eval.block.max_samples: 8
+  eval.block.parallel_checkpoints: 2
+  eval.block.chunk_parallel: 2
+  eval.test_train_modes.eval_at_steps: [2]
+  eval.test_heldout.eval_at_steps: [2]
+  eval.test_baseline.eval_at_steps: [2]
+  registry.noise: false
+axes:
+  - - {_label: {model: gptoss20b, k: r32}, model: gptoss20b, cpt_meta.k: null}
+    - {_label: {model: gptoss20b, k: "1e4"}, model: gptoss20b, lora.lora_rank: 1, lora.lora_alpha: 1, elicitation.train_params: 10000, train.lr: 0.028846043194864696, cpt_meta.rank: 1, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.028846043194864696}
+    - {_label: {model: qwen8b, k: r32}, model: qwen8b, cpt_meta.k: null}
+    - {_label: {model: qwen8b, k: "1e4"}, model: qwen8b, lora.lora_rank: 1, lora.lora_alpha: 1, elicitation.train_params: 10000, train.lr: 0.014014684869807097, cpt_meta.rank: 1, cpt_meta.klabel: "1e4", cpt_meta.k: 10000, cpt_meta.lr: 0.014014684869807097}
+max_gpus: 12
