@@ -1,5 +1,6 @@
 """Simple slide figures for the 2026-10-09 elicitation write-up (gpt-oss-20b). Reads data/interventions.csv and
-data/curves.csv (from collect.py); writes figures/fig{1,2,3}_*.{png,pdf}.
+data/curves.csv (from collect.py); writes figures/slides/fig{1,2,3}_*.{png,pdf}. The post versions (fig1-5, with
+subtitles, CIs and the orange expansion) are built by post_figures.py, which imports the data helpers from here.
 
     .venv/bin/python kaushik/elicit/writeup/figures.py
 """
@@ -16,8 +17,8 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-FIG = HERE / "figures"
-FIG.mkdir(exist_ok=True)
+FIG = HERE / "figures" / "slides"
+FIG.mkdir(parents=True, exist_ok=True)
 
 
 BLUE, ORANGE, GREY, INK, MUTED, GRID, GUARD = "#2a78d6", "#eb6834", "#8a8a84", "#0b0b0b", "#52514e", "#e6e6e3", "#f1f5fb"
