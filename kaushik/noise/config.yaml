@@ -1,0 +1,95 @@
+# KL-matched random-LoRA controls (README.md). One "run" = one GROUP: the registered seeds of one
+# (experiment, arm[, dose suffix], base model) arm. make_groups.py reads kaushik/registry/*.json and writes
+#   sweeps/groups.yaml  one point per group  (job: make -> replay -> analyze; the `group` section below)
+#   sweeps/kl.yaml      one point per base model x eval template kwargs (job: kl; the `kl` point keys below)
+# Everything numeric lives here; sweep points and `key=value` overrides sit on top (kaushik/ARCHITECTURE.md).
+run_name: "{group}"
+run_dir: "kaushik/noise/runs/{run_name}"
+runs_dir: kaushik/noise/runs                 # scheduler state, watch state, progress.md
+modal:
+  random_lora_app: cot-control-sprint_kaushik-reddy_random-lora   # deployed CPU adapter-build app (`noise deploy`)
+retries:                                     # transient Modal / gRPC drops on long engine calls
+  attempts: 5
+  delay_s: 30
+  max_delay_s: 300
+
+group:                     # one point of sweeps/groups.yaml (schema; make_groups.py fills every key)
+  experiment: null         # kaushik/ folder owning the trained runs (registry `experiment`)
+  arm: null
+  base_model: null
+  noise: false             # build + evaluate the noise adapters
+  measure_kl: false        # KL(base || adapter) for every registered seed
+  eval_chat_template_kwargs: null
+  expected_seeds: 0        # see `groups.min_seeds`
+  entries: []              # [{run_name, seed, adapter_path, config_path, noise_eval_blocks?, eval_chat_template_kwargs?, registry_path}]
+
+kl:                        # KL(base || adapter) per token on the base model's own T=1 samples
+  split: val
+  dataset: all
+  n_prompts: 200           # unconstrained (mode=baseline) questions, one sample each
+  max_tokens: 2048
+  seed: 0                  # vLLM sampling seed
+  temperature: 1.0
+  top_p: 1.0
+  bootstrap_draws: 1000    # prompt-level bootstrap of the KL estimate (tokens within a sample are correlated)
+  bootstrap_seed: 0
+  gpu: H200                # engine GPU when no source config supplies one (ad hoc `kl --adapter`)
+  samples_dir: kaushik/noise/runs/_samples   # <model slug>[-<kwargs hash>]/{samples,base_logprobs}.json, shared per base model
+  records_dir: kaushik/noise/runs/_kl        # <run_name>.json (trained adapters, and <group>--noise<k> for the controls)
+  # per point of sweeps/kl.yaml: base_model, chat_template_kwargs, engine_config (source train_eval config
+  # supplying gpu / tp / lora rank / model len), entries [{run_name, adapter_path, config_path, experiment, arm, seed}]
+  base_model: null
+  chat_template_kwargs: null
+  engine_config: null
+  entries: []
+
+noise:                     # the random adapters of a group (cotcontrol/training/random_lora.py)
+  seeds: [0, 1, 2]         # one adapter per seed; the direction is fixed per (seed, module)
+  family: frob             # per-(module, expert) update norm = scale x the reference adapter's
+  tolerance: 0.1           # |KL / target - 1| accepted by the calibration
+  scale0: 1.0              # first candidate scale of the first seed; later seeds start at the first seed's result
+  max_evals: 10            # build + score rounds per seed
+  grow: 4.0                # geometric bracket growth of the scale search
+  out_root: "/checkpoints/noise/{run_name}"   # noise<k> adapters on the checkpoints volume (+ _calib scratch)
+
+replay:                    # the arm's own final eval blocks, replayed on the noise adapters
+  blocks: null             # override the entries' `noise_eval_blocks` selector (list | "<cfg>.yaml#<selector>" | selector)
+  patch:                   # applied to every replayed block
+    eval_at_steps: null
+    eval_base_model: false
+  default_chunk: 250       # prompts per engine call when the block sets no chunk
+  expect:                  # the spec's protocol; a block that deviates is replicated as configured, with a warning
+    temperature: 1.0
+    max_tokens: 16000
+
+groups:                    # make_groups.py
+  experiments: [fragility, fragility/cpt, orange, orange/rl]   # folders whose configs/ name runs still to register
+  kl_only: [lowlr, cpt_param_sweep, cptk]   # group-name substrings: KL only, never a noise group (single-seed sweep points)
+  min_seeds:               # expected seeds = max(configs of the arm in the owning folder, this, registered)
+    default: 3
+    qwen36_27b: 5
+  wait_hours: 4            # process a group whose seeds are still missing after this long (watch records first sight)
+  priority_models: [qwen36_27b]   # groups of these models are scheduled first (slowest evals, critical path)
+
+analysis:
+  bootstrap_draws: 1000    # two-way bootstrap, questions x adapters (defaults.yaml says 2000: the committed noise tables use 1000)
+  bootstrap_seed: 0
+  degen_chars: 200
+  results_md: kaushik/noise/results.md
+
+watch:
+  interval_s: 180          # registry poll interval
+  max_hours: 24
+  idle_hours: 4            # stop after this long without new registry entries once everything is processed
+
+smoke:                     # `noise smoke`: KL sanity checks on a 5-step Qwen3-8B adapter (smoke/config.yaml trains it)
+  experiment: noise/smoke
+  n_prompts: 64
+  max_tokens: 1024
+  scales: [0.25, 1.0, 4.0, 16.0]   # random adapters at these multiples of the trained per-module norm
+  chat_template_kwargs: {enable_thinking: true}
+  engine: {gpu: H200, max_lora_rank: 64, max_model_len: 16384}
+  out: kaushik/noise/runs/_smoke
+  volume_root: /checkpoints/noise/_smoke
+  ckpt0_max_kl: 0.001      # KL(base || zero-init adapter) must be below this
+  monotone_min_se: 3       # monotonicity is judged on points more than this many SEs above zero

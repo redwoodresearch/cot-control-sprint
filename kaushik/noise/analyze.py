@@ -1,50 +1,47 @@
 """Aggregate noise-control results: per group, noise vs trained vs untrained.
 
-    .venv/bin/python kaushik/run.py noise analyze [--groups G ...]
+    .venv/bin/python kaushik/run.py noise analyze [--groups G ...] [--boot 1000] [--seed 0] [--out DIR] [--md PATH]
 
 Metrics per rollout (orange-training/analyze.py + spec "Shared setup"):
   honest      cotcontrol.eval.grading.is_honest (strict + answer + not hollow)
   raw         strict compliance
   acc         answer correct
   chars       reasoning length (reasoning_text_graded)
-  degen       chars < 200
-  compl_long  strict compliance among traces >= the untrained checkpoint-0
-              median length for the same block (pooled over the group's seeds)
+  degen       chars < analysis.degen_chars
+  compl_long  strict compliance among traces >= the untrained checkpoint-0 median length for
+              the same block (pooled over the group's seeds)
 
-Pooled over adapters (seeds) and questions; 95% intervals from a two-way
-bootstrap (questions x adapters, 1000 draws). The trained - noise difference
-reuses the same question draws for both arms (paired on questions). Trained /
-untrained rollouts come from the source runs' own eval JSONs for the same
-blocks (eval/<block>/checkpoint-<final|0>.json under the run_dir in the
-train_eval config).
+Pooled over adapters (seeds) and questions; 95% intervals from a two-way ratio bootstrap
+(questions x adapters, analysis.bootstrap_draws draws, analysis.bootstrap_seed). The trained -
+noise difference reuses the same question draws for both arms (paired on questions). This
+estimator (ratio of resampled sums, so compl_long's denominator is resampled too) is not one of
+kaushik.core.stats' families; the committed tables depend on its exact draw order, so it stays
+here. Trained / untrained rollouts come from the source runs' own eval JSONs for the same
+blocks (eval/<block>/checkpoint-<final|0>.json under the run_dir in the train_eval config).
 
-Writes runs/<group>/results.json and results.md (all groups).
+Writes runs/<group>/results.json (`config` = make_groups.group_record) and results.md (all groups).
 """
 
+# ruff: noqa: DTZ005 — naive local timestamps, like the rest of the repo
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import statistics
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import yaml
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT))
 from cotcontrol.eval.grading import is_honest
+from kaushik.core.io import KAUSHIK, ROOT, load_py, read_json
+from kaushik.core.scheduler import Job
 
-RUNS = HERE / "runs"
-CONFIGS = HERE / "configs"
+nz = load_py(KAUSHIK / "noise" / "common.py")
+
 METRICS = ["honest", "raw", "acc", "chars", "degen", "compl_long"]
 PCT = {"honest", "raw", "acc", "degen", "compl_long"}
-DEGEN_CHARS = 200
-N_BOOT = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -75,11 +72,6 @@ def source_run_dir(entry: dict) -> Path | None:
     return None
 
 
-def final_step(adapter_path: str) -> int | None:
-    m = re.search(r"checkpoint-(\d+)/?$", adapter_path)
-    return int(m.group(1)) if m else None
-
-
 def source_eval_file(run_dir: Path | None, block: str, step) -> Path | None:
     if run_dir is None or step is None:
         return None
@@ -100,7 +92,7 @@ def _chars(s: dict) -> int:
     return len(s.get("reasoning_text_graded") or s.get("reasoning") or "")
 
 
-def rollout_terms(s: dict, bar: float | None) -> dict[str, tuple[float, float]]:
+def rollout_terms(s: dict, bar: float | None, degen_chars: int) -> dict[str, tuple[float, float]]:
     """metric -> (numerator, denominator) contributions of one rollout."""
     c = _chars(s)
     graded = s.get("compliance") is not None
@@ -110,7 +102,7 @@ def rollout_terms(s: dict, bar: float | None) -> dict[str, tuple[float, float]]:
         "raw": (float(s.get("compliance") == 1), float(graded)),
         "acc": (float(s.get("correct") is True), 1.0),
         "chars": (float(c), 1.0),
-        "degen": (float(c < DEGEN_CHARS), 1.0),
+        "degen": (float(c < degen_chars), 1.0),
         "compl_long": (float(long_ and s.get("compliance") == 1), float(long_)),
     }
 
@@ -118,7 +110,8 @@ def rollout_terms(s: dict, bar: float | None) -> dict[str, tuple[float, float]]:
 class Arm:
     """Rollouts of one arm (several adapters) as (adapter, question) term arrays."""
 
-    def __init__(self, name: str, adapters: dict[str, list[tuple[str, dict]]], qindex: dict[str, int], bar):
+    def __init__(self, name: str, adapters: dict[str, list[tuple[str, dict]]], qindex: dict[str, int], bar,
+                 degen_chars: int):
         self.name = name
         self.adapters = list(adapters)
         A, Q = len(adapters), len(qindex)
@@ -128,7 +121,7 @@ class Arm:
         for a, rollouts in enumerate(adapters.values()):
             for q, s in rollouts:
                 qi = qindex[q]
-                for m, (nu, de) in rollout_terms(s, bar).items():
+                for m, (nu, de) in rollout_terms(s, bar, degen_chars).items():
                     self.num[m][a, qi] += nu
                     self.den[m][a, qi] += de
                 self.n += 1
@@ -159,11 +152,12 @@ def _ci(x: np.ndarray) -> list[float]:
     return [float(np.percentile(x, 2.5)), float(np.percentile(x, 97.5))] if len(x) else [float("nan")] * 2
 
 
-def compare(arms: dict[str, Arm], n_q: int, seed: int = 0) -> dict:
-    """Point estimates + 95% CIs per arm and for trained - noise (paired on questions)."""
+def compare(arms: dict[str, Arm], n_q: int, draws: int, seed: int) -> dict:
+    """Point estimates + 95% CIs per arm and for trained - noise (paired on questions).
+    Draw order: the question multiplicities first, then one adapter resample per arm."""
     rng = np.random.default_rng(seed)
-    wq = _multiplicities(rng, n_q, N_BOOT)
-    wa = {k: _multiplicities(rng, len(arm.adapters), N_BOOT) for k, arm in arms.items()}
+    wq = _multiplicities(rng, n_q, draws)
+    wa = {k: _multiplicities(rng, len(arm.adapters), draws) for k, arm in arms.items()}
     reps = {k: {m: arm.replicates(m, wa[k], wq) for m in METRICS} for k, arm in arms.items()}
     out = {}
     for k, arm in arms.items():
@@ -185,53 +179,38 @@ def compare(arms: dict[str, Arm], n_q: int, seed: int = 0) -> dict:
 # per group
 # ---------------------------------------------------------------------------
 
-def load_group(name: str) -> dict | None:
-    """The group config, or None (missing, or not a group config such as smoke_qwen8b.yaml)."""
-    p = CONFIGS / f"{name}.yaml"
-    cfg = yaml.safe_load(p.read_text()) if p.exists() else None
-    return cfg if isinstance(cfg, dict) and "entries" in cfg else None
-
-
-def group_names() -> list[str]:
-    return sorted(p.stem for p in CONFIGS.glob("*.yaml") if load_group(p.stem))
-
-
-def kl_record(run_name: str) -> dict | None:
-    p = RUNS / "_kl" / f"{run_name}.json"
-    return json.loads(p.read_text()) if p.exists() else None
-
-
-def analyze_group(name: str) -> dict:
-    cfg = load_group(name)
-    gdir = RUNS / name
-    out = {"group": name, "config": cfg, "timestamp": datetime.now().isoformat(),
+def analyze_group(cfg: dict, draws: int | None = None, seed: int | None = None, out_dir: Path | None = None) -> dict:
+    """results.json of one group (written under out_dir/<group>/ when given, else the group dir)."""
+    an, g, name = cfg["analysis"], cfg["group"], cfg["run_name"]
+    draws = int(an["bootstrap_draws"]) if draws is None else int(draws)
+    seed = int(an["bootstrap_seed"]) if seed is None else int(seed)
+    degen_chars = int(an["degen_chars"])
+    gdir = nz.group_dir(cfg)
+    out = {"group": name, "config": nz.make_groups_module().group_record(cfg), "timestamp": datetime.now().isoformat(),
            "trained_kl": {}, "noise": None, "blocks": {}}
-    if cfg is None:
-        return out
-    for e in cfg["entries"]:
-        rec = kl_record(e["run_name"])
+    for e in g["entries"]:
+        rec = nz.kl_record(cfg, e["run_name"])
         if rec:
             out["trained_kl"][e["run_name"]] = {"seed": e["seed"], **{k: rec["kl"][k] for k in
                                                 ("kl_per_token", "se_prompt", "ci95_prompt", "n_tokens")}}
     if out["trained_kl"]:
         out["trained_kl_median"] = statistics.median(v["kl_per_token"] for v in out["trained_kl"].values())
-    na = gdir / "noise_adapters.json"
-    if na.exists():
-        d = json.loads(na.read_text())
-        out["noise"] = {"target_kl": d["target_kl"], "reference": d["reference"]["run_name"], "family": d["family"],
+    na = read_json(gdir / "noise_adapters.json")
+    if na:
+        out["noise"] = {"target_kl": na["target_kl"], "reference": na["reference"]["run_name"], "family": na["family"],
                         "adapters": [{k: a[k] for k in ("k", "seed", "scale", "path")}
                                      | {"kl_per_token": a["kl"]["kl_per_token"], "se_prompt": a["kl"]["se_prompt"],
-                                        "n_calibration_evals": len(a["calibration"])} for a in d["adapters"]]}
+                                        "n_calibration_evals": len(a["calibration"])} for a in na["adapters"]]}
     eval_root = gdir / "eval"
     if not eval_root.is_dir():
         return out
-    steps = {e["run_name"]: final_step(e["adapter_path"]) for e in cfg["entries"]}
-    run_dirs = {e["run_name"]: source_run_dir(e) for e in cfg["entries"]}
+    steps = {e["run_name"]: nz.final_step(e["adapter_path"]) for e in g["entries"]}
+    run_dirs = {e["run_name"]: source_run_dir(e) for e in g["entries"]}
     for bdir in sorted(p for p in eval_root.iterdir() if p.is_dir()):
         block = bdir.name
         noise = {p.stem: load_rollouts(p) for p in sorted(bdir.glob("noise*.json"))}
         trained, untrained = {}, {}
-        for e in cfg["entries"]:
+        for e in g["entries"]:
             f = source_eval_file(run_dirs[e["run_name"]], block, steps[e["run_name"]])
             if f:
                 trained[e["run_name"]] = load_rollouts(f)
@@ -243,13 +222,15 @@ def analyze_group(name: str) -> dict:
         arms_raw = {k: v for k, v in (("noise", noise), ("trained", trained), ("untrained", untrained)) if v}
         qkeys = sorted({q for arm in arms_raw.values() for r in arm.values() for q, _ in r})
         qindex = {q: i for i, q in enumerate(qkeys)}
-        arms = {k: Arm(k, v, qindex, bar) for k, v in arms_raw.items()}
-        res = compare(arms, len(qkeys))
+        arms = {k: Arm(k, v, qindex, bar, degen_chars) for k, v in arms_raw.items()}
+        res = compare(arms, len(qkeys), draws, seed)
         res["n_questions"] = len(qkeys)
         res["long_bar_chars"] = bar
         res["sources"] = {"trained": sorted(trained), "untrained": sorted(untrained), "noise": sorted(noise)}
         out["blocks"][block] = res
-    (gdir / "results.json").write_text(json.dumps(out, indent=1))
+    dest = (Path(out_dir) / name if out_dir else gdir) / "results.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(out, indent=1))
     return out
 
 
@@ -271,7 +252,7 @@ def _row(block: str, arm: str, r: dict) -> str:
     return f"| {block} | {arm} ({len(r['adapters'])} adapters, n={r['n']}) | {cells} |"
 
 
-def write_results_md(results: dict[str, dict], path: Path = HERE / "results.md") -> None:
+def write_results_md(results: dict[str, dict], path: Path) -> None:
     L = [(f"# Noise controls: results\n\nGenerated {datetime.now():%Y-%m-%d %H:%M}. "
           "Percent for honest/raw/acc/degen/compl_long, mean reasoning chars for chars, nats/token for KL. "
           "Brackets: 95% bootstrap over questions x adapters (seeds). "
@@ -322,21 +303,54 @@ def write_results_md(results: dict[str, dict], path: Path = HERE / "results.md")
     path.write_text("\n".join(L) + "\n")
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--groups", nargs="*", default=None)
-    args = ap.parse_args(argv)
-    names = args.groups or group_names()
-    results = {n: analyze_group(n) for n in names}
-    for n, r in results.items():
-        done = [b for b, v in r.get("blocks", {}).items() if "noise" in v]
-        print(f"{n}: KL for {len(r.get('trained_kl', {}))} seeds; noise evals in {len(done)} blocks")
-    # results.md covers every group from its saved results.json (cheap), so a
-    # `process` job only re-analyzes its own group.
-    saved = {p.parent.name: json.loads(p.read_text()) for p in RUNS.glob("*/results.json")}
-    write_results_md({**saved, **results})
-    print(f"wrote {HERE / 'results.md'}")
+def saved_results(root: Path) -> dict[str, dict]:
+    return {p.parent.name: json.loads(p.read_text()) for p in sorted(root.glob("*/results.json"))}
 
 
-if __name__ == "__main__":
-    main()
+# ---------------------------------------------------------------------------
+# entry points
+# ---------------------------------------------------------------------------
+
+def jobs(cfg: dict) -> list[Job]:
+    """One zero-weight job per noise group: results.json once eval_summary.json exists (and is
+    newer), then results.md from every saved results.json."""
+    g = cfg["group"]
+    if not g["noise"]:
+        return []
+    name, gdir = cfg["run_name"], nz.group_dir(cfg)
+    es, rj = gdir / "eval_summary.json", gdir / "results.json"
+
+    async def run():
+        analyze_group(cfg)
+        write_results_md(saved_results(nz.runs_dir(cfg)), ROOT / cfg["analysis"]["results_md"])
+
+    return [Job(name=f"analyze:{name}", weight=0, run=run,
+                done=lambda: rj.exists() and es.exists() and rj.stat().st_mtime >= es.stat().st_mtime,
+                ready=es.exists, priority=(7, nz.model_rank(cfg, g["base_model"]), name), group=str(gdir))]
+
+
+def main(cfg: dict, argv: list[str] | None = None) -> None:
+    an = cfg["analysis"]
+    ap = argparse.ArgumentParser(prog="noise analyze", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--groups", nargs="*", default=None, help="groups to re-analyze (default: every group)")
+    ap.add_argument("--boot", type=int, default=int(an["bootstrap_draws"]))
+    ap.add_argument("--seed", type=int, default=int(an["bootstrap_seed"]))
+    ap.add_argument("--out", default=None, help="write <DIR>/<group>/results.json instead of the group dirs")
+    ap.add_argument("--md", default=None, help=f"results.md path (default {an['results_md']})")
+    a = ap.parse_args(argv)
+    points = {c["run_name"]: c for c in nz.group_points(cfg)}
+    names = a.groups or list(points)
+    out_dir = Path(a.out) if a.out else None
+    results = {}
+    for n in names:
+        if n not in points:
+            raise SystemExit(f"unknown group {n!r}; known: {sorted(points)}")
+        results[n] = analyze_group(points[n], a.boot, a.seed, out_dir)
+        done = [b for b, v in results[n].get("blocks", {}).items() if "noise" in v]
+        print(f"{n}: KL for {len(results[n].get('trained_kl', {}))} seeds; noise evals in {len(done)} blocks")
+    # results.md covers every group from its saved results.json (cheap), so a per-group job only
+    # re-analyzes its own group.
+    saved = saved_results(out_dir if out_dir else nz.runs_dir(cfg))
+    md = Path(a.md) if a.md else ROOT / an["results_md"]
+    write_results_md({**saved, **results}, md)
+    print(f"wrote {md}")

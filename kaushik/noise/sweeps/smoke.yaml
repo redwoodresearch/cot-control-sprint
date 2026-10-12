@@ -1,0 +1,5 @@
+# The smoke adapter (one run): run.py sweep noise/sweeps/smoke.yaml --check kaushik/noise/configs/smoke_qwen8b.yaml
+experiment: noise/smoke
+job: train
+run_name: noise-smoke-qwen8b
+max_gpus: 1

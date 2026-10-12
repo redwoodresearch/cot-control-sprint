@@ -1,4 +1,9 @@
-"""Cross-process cap on concurrent Modal GPUs for the noise pipeline.
+"""LEGACY (kept for kaushik/elicit/*/evalrun.py, which load this file by path): a
+cross-process cap on concurrent Modal GPUs. The noise pipeline itself no longer uses it; its
+GPU accounting is kaushik/core/scheduler.py (cap file <runs>/.gpu_cap). Delete once elicit/*
+has moved to the core scheduler.
+
+Original description: cross-process cap on concurrent Modal GPUs for the noise pipeline.
 
 The sprint budget is a hard cap on GPUs in flight (15, dropping to 7 six hours
 after the first full launch). Every GPU-backed engine call in this folder
