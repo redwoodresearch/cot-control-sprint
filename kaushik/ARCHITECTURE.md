@@ -1,4 +1,4 @@
-# kaushik/ architecture (target; refactor started 2026-10-12)
+# kaushik/ architecture (refactor completed 2026-10-12)
 
 Same principles as Sebastian's setup: one YAML schema drives every run (`cotcontrol/training/config.py` +
 `scripts/train_eval.py`), single-purpose scripts, sweeps that expand a base config. Unlike his setup, the eval

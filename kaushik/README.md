@@ -13,7 +13,7 @@ Run everything through the runner, which sets `COTCONTROL_MODAL_OWNER=kaushik-re
 ```
 
 Target design: [ARCHITECTURE.md](ARCHITECTURE.md); shared library and migration checklist: [core/README.md](core/README.md).
-Migrated so far: `orange_expand/` (pilot).
+All experiment folders are migrated (2026-10-12): `config.yaml` + `sweeps/*.yaml` + single-purpose jobs on `kaushik/core`.
 
 | folder | experiment | status |
 |---|---|---|
