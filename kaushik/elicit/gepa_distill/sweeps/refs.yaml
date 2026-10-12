@@ -1,0 +1,12 @@
+# Teacher check (README): the GEPA s1 prompt vs no prompt on full val (200 q) and the prompt on test (500 q);
+# untrained test = the fragility checkpoint-0 evals (analysis.untrained_test), not a second run.
+#   run.py sweep elicit/gepa_distill/sweeps/refs.yaml --dry-run
+#   .venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_distill/sweeps/refs.yaml
+experiment: elicit/gepa_distill
+job: evalrun
+run_name: "{arm}_{split}"
+axes:
+  - - {_label: {arm: teacher, split: val}, eval.block.split: val, eval.block.system_prompt: monitorability/prompts/gepa_general.txt}
+    - {_label: {arm: untrained, split: val}, eval.block.split: val}
+    - {_label: {arm: teacher, split: test}, eval.block.split: test, eval.block.system_prompt: monitorability/prompts/gepa_general.txt}
+max_gpus: 24

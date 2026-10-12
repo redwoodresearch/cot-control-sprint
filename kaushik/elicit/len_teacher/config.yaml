@@ -1,0 +1,123 @@
+# Workstream C2: length-preserving GEPA-style teacher prompts for gpt-oss-20b (README.md). Protocol,
+# trainer defaults, noise recipe and analysis come from ../config.yaml; this file names the Modal sub-apps,
+# the teacher-prompt variants and the length-curve analysis (curves.py). Sweeps: sweeps/*.yaml.
+extends: ../config.yaml
+modal:
+  sub: len-teacher
+  apps:
+    distill: {file: kaushik/elicit/common/distill_app.py}
+    random-lora: {name: cot-control-sprint_kaushik-reddy_sub-gepa-lora_random-lora}   # B2's app, reused (not ours to deploy)
+
+distill:
+  out_root: /checkpoints/gepa_lora   # the C2 trainer wrote next to B2's adapters (never launched)
+
+# Teacher prompt variants: prompts/<file>.txt (+ reasoning_effort). gepa / high = Workstream B's pinned prompt
+# (prompts/gepa.txt stripped == monitorability/prompts/gepa_general.txt stripped).
+variants:
+  gepa:            {prompt: kaushik/elicit/len_teacher/prompts/gepa.txt, reasoning_effort: medium}          # reference (B's teacher_val / teacher_test)
+  len_append:      {prompt: kaushik/elicit/len_teacher/prompts/len_append.txt, reasoning_effort: medium}    # GEPA + point 6: reason as fully / as long as normal
+  steps_append:    {prompt: kaushik/elicit/len_teacher/prompts/steps_append.txt, reasoning_effort: medium}  # GEPA + point 6: step by step in full detail
+  high:            {prompt: kaushik/elicit/len_teacher/prompts/gepa.txt, reasoning_effort: high}            # GEPA at reasoning_effort high
+  rewrite:         {prompt: kaushik/elicit/len_teacher/prompts/rewrite.txt, reasoning_effort: medium}       # GEPA rewritten: scored on compliance AND thoroughness
+  len_append_high: {prompt: kaushik/elicit/len_teacher/prompts/len_append.txt, reasoning_effort: high}
+  # round 2 (coordinator): aim to LIFT the honest-vs-length curve at long lengths rather than shorten
+  recheck:         {prompt: kaushik/elicit/len_teacher/prompts/recheck.txt, reasoning_effort: medium}       # GEPA + point 6: re-check the Requirement at every paragraph
+  recheck_len:     {prompt: kaushik/elicit/len_teacher/prompts/recheck_len.txt, reasoning_effort: medium}   # len_append + the recheck point
+  sustain:         {prompt: kaushik/elicit/len_teacher/prompts/sustain.txt, reasoning_effort: medium}       # GEPA rewritten around sustaining the form over a long trace
+
+# curves.py: P(honest | reasoning-length bin) for every gpt-oss-20b intervention with rollouts on disk.
+curves:
+  boot: 500
+  bins: [0, 1000, 2000, 2600, 4000, 8000, .inf]
+  bin_labels: ["<1k", "1-2k", "2-2.6k", "2.6-4k", "4-8k", ">8k"]
+  long_bin: "2.6-4k"                       # first bin counted as "long" (>= 2.6k chars ~ the untrained median)
+  case_modes: [alternating_case, lowercase_thinking, uppercase_thinking]
+  roots:                                    # other workstreams' eval JSONs, read-only
+    GD: kaushik/elicit/gepa_distill/runs
+    GL: kaushik/elicit/gepa_lora/runs
+    DOSE: kaushik/elicit/gepa_dose/runs
+    NS: kaushik/elicit/nocot_sft/runs
+    FRAG: kaushik/fragility/runs
+    RUNS: kaushik/elicit/len_teacher/runs
+  subset_root: DOSE                         # `subset: x1.5_sw` restricts to the questions of DOSE/x1.5_sw/modes.json
+  # arms: {name, group, split, paths: [<ROOT>/<rel>, ...] | nocot: {arm, ckpt, split, seeds?, suffix?}, subset?}
+  arms:
+    # --- val, full 200 q ---
+    - {name: untrained, group: reference, split: val, paths: [GD/untrained_val/modes.json]}
+    - {name: GEPA prompt (teacher), group: prompt, split: val, paths: [GD/teacher_val/modes.json]}
+    - {name: GEPA LoRA x1 (lr1e-4), group: lora, split: val, paths: [GL/lr1e-4_c400_val/modes.json]}
+    - {name: GEPA LoRA lr3e-4, group: lora, split: val, paths: [GL/lr3e-4_c400_val/modes.json]}
+    - {name: GEPA LoRA + header anchor, group: lora, split: val, paths: [GL/anchor_c400_val/modes.json]}
+    - {name: GEPA LoRA x1.5 (C1), group: dose, split: val, paths: [DOSE/x1.5_val/modes.json]}
+    - {name: steer last_L12_a1 (B), group: steer, split: val, paths: [GD/st_last_L12_a1_val/modes.json]}
+    - {name: steer last_L15_a2 (B), group: steer, split: val, paths: [GD/st_last_L15_a2_val/modes.json]}
+    - {name: 1A answer-only SFT (ref1a@50), group: sft, split: val, paths: [NS/ref1a-mcq_noreason-gptoss20b-seed0/eval/val_modes/checkpoint-50.json]}
+    - {name: noCoT gentle@50, group: sft, split: val, nocot: {arm: gentle, ckpt: 50, split: val}}
+    - {name: noCoT gentle@100, group: sft, split: val, nocot: {arm: gentle, ckpt: 100, split: val}}
+    - {name: noCoT mix@50, group: sft, split: val, nocot: {arm: mix, ckpt: 50, split: val}}
+    - {name: noCoT mix@100, group: sft, split: val, nocot: {arm: mix, ckpt: 100, split: val}}
+    - {name: noCoT fmt@25 (A selected), group: sft, split: val, nocot: {arm: fmt, ckpt: 25, split: val}}
+    - {name: noCoT fmt@50, group: sft, split: val, nocot: {arm: fmt, ckpt: 50, split: val}}
+    - {name: noCoT fmt_mix@50, group: sft, split: val, nocot: {arm: fmt_mix, ckpt: 50, split: val}}
+    - {name: noCoT fmt_mix@100, group: sft, split: val, nocot: {arm: fmt_mix, ckpt: 100, split: val}}
+    - {name: noCoT fmt_long@75, group: sft, split: val, nocot: {arm: fmt_long, ckpt: 75, split: val}}
+    - {name: noCoT fmt_long@150, group: sft, split: val, nocot: {arm: fmt_long, ckpt: 150, split: val}}
+    - {name: C2 steps_append prompt, group: prompt, split: val, paths: [RUNS/steps_append_val/modes.json]}
+    - {name: C2 len_append prompt, group: prompt, split: val, paths: [RUNS/len_append_val/modes.json]}
+    - {name: C2 rewrite prompt, group: prompt, split: val, paths: [RUNS/rewrite_val/modes.json]}
+    - {name: C2 GEPA @ effort high, group: prompt, split: val, paths: [RUNS/high_val/modes.json]}
+    - {name: C2 len_append @ high, group: prompt, split: val, paths: [RUNS/len_append_high_val/modes.json]}
+    - {name: C2 recheck_len prompt, group: prompt, split: val, paths: [RUNS/recheck_len_val/modes.json]}
+    - {name: C2 sustain prompt, group: prompt, split: val, paths: [RUNS/sustain_val/modes.json]}
+    # --- val, 40-q sweeps (C1 doses; references restricted to the same questions) ---
+    - {name: GEPA LoRA x0.5 (40q), group: dose40, split: val, paths: [DOSE/x0.5_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x0.75 (40q), group: dose40, split: val, paths: [DOSE/x0.75_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.05 (40q), group: dose40, split: val, paths: [DOSE/x1.05_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.1 (40q), group: dose40, split: val, paths: [DOSE/x1.1_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.15 (40q), group: dose40, split: val, paths: [DOSE/x1.15_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.2 (40q), group: dose40, split: val, paths: [DOSE/x1.2_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.3 (40q), group: dose40, split: val, paths: [DOSE/x1.3_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.5 (40q), group: dose40, split: val, paths: [DOSE/x1.5_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x2 (40q), group: dose40, split: val, paths: [DOSE/x2_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x3 (40q), group: dose40, split: val, paths: [DOSE/x3_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x0.75 + prompt (40q), group: dose40, split: val, paths: [DOSE/x0.75_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.05 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.05_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.1 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.1_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.15 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.15_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.2 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.2_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.3 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.3_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1.5 + prompt (40q), group: dose40, split: val, paths: [DOSE/x1.5_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x2 + prompt (40q), group: dose40, split: val, paths: [DOSE/x2_prompt_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1 @ high (40q), group: dose40, split: val, paths: [DOSE/x1_high_sw/modes.json], subset: x1.5_sw}
+    - {name: GEPA prompt @ high (40q), group: dose40, split: val, paths: [DOSE/prompt_high_sw/modes.json], subset: x1.5_sw}
+    - {name: untrained @ high (40q), group: dose40, split: val, paths: [DOSE/untrained_high_sw/modes.json], subset: x1.5_sw}
+    - {name: untrained (40q), group: dose40, split: val, paths: [GD/untrained_val/modes.json], subset: x1.5_sw}
+    - {name: GEPA prompt (40q), group: dose40, split: val, paths: [GD/teacher_val/modes.json], subset: x1.5_sw}
+    - {name: GEPA LoRA x1 (40q), group: dose40, split: val, paths: [GL/lr1e-4_c400_val/modes.json], subset: x1.5_sw}
+    # --- C2 round-2 prompts (40 q, same subset) ---
+    - {name: C2 recheck prompt (40q), group: prompt40, split: val, paths: [RUNS/recheck_sw/modes.json], subset: x1.5_sw}
+    - {name: C2 recheck_len prompt (40q), group: prompt40, split: val, paths: [RUNS/recheck_len_sw/modes.json], subset: x1.5_sw}
+    - {name: C2 sustain prompt (40q), group: prompt40, split: val, paths: [RUNS/sustain_sw/modes.json], subset: x1.5_sw}
+    # --- test, 500 q ---
+    - {name: untrained, group: reference, split: test, paths: [FRAG/fragility-mcq_noreason-gptoss20b-seed0/eval/final_modes/checkpoint-0.json]}
+    - {name: GEPA prompt (teacher), group: prompt, split: test, paths: [GD/teacher_test/modes.json]}
+    - {name: GEPA LoRA x1 (3 seeds), group: lora, split: test, paths: [GL/lr1e-4_c400_test_s0/modes.json, GL/lr1e-4_c400_test_s1/modes.json, GL/lr1e-4_c400_test_s2/modes.json]}
+    - {name: KL-matched random LoRA (3), group: control, split: test, paths: [GL/noise_lr1e-4_c400_test_n0/modes.json, GL/noise_lr1e-4_c400_test_n1/modes.json, GL/noise_lr1e-4_c400_test_n2/modes.json]}
+    - {name: "GEPA LoRA x1.5 (3 seeds, C1)", group: dose, split: test, paths: [DOSE/x1.5_test_s0/modes.json, DOSE/x1.5_test_s1/modes.json, DOSE/x1.5_test_s2/modes.json]}
+    - {name: steer last_L12_a1 (B), group: steer, split: test, paths: [GD/st_last_L12_a1_test/modes.json]}
+    - {name: steer last_L15_a2 (B), group: steer, split: test, paths: [GD/st_last_L15_a2_test/modes.json]}
+    - {name: steer random_L15_a2 (control), group: control, split: test, paths: [GD/st_random_L15_a2_test/modes.json]}
+    - {name: steer resid_L12_a2 (GEPA - brevity), group: steer, split: test, paths: [GD/st_resid_L12_a2_test/modes.json]}
+    - {name: 1A answer-only SFT (3 seeds), group: sft, split: test, paths: [FRAG/fragility-mcq_noreason-gptoss20b-seed0/eval/final_modes/checkpoint-50.json, FRAG/fragility-mcq_noreason-gptoss20b-seed1/eval/final_modes/checkpoint-50.json, FRAG/fragility-mcq_noreason-gptoss20b-seed2/eval/final_modes/checkpoint-50.json]}
+    - {name: noCoT fmt@25 (A selected), group: sft, split: test, nocot: {arm: fmt, ckpt: 25, split: test, suffix: -step25}}
+    - {name: noCoT fmt@50, group: sft, split: test, nocot: {arm: fmt, ckpt: 50, split: test}}
+    - {name: noCoT gentle@100, group: sft, split: test, nocot: {arm: gentle, ckpt: 100, split: test}}
+    - {name: noCoT mix@100, group: sft, split: test, nocot: {arm: mix, ckpt: 100, split: test}}
+    - {name: noCoT fmt_mix@100, group: sft, split: test, nocot: {arm: fmt_mix, ckpt: 100, split: test}}
+    - {name: noCoT fmt_long@150, group: sft, split: test, nocot: {arm: fmt_long, ckpt: 150, split: test}}
+  fig_val: [untrained, GEPA prompt (teacher), GEPA LoRA x1 (lr1e-4), GEPA LoRA x1.5 (C1), steer last_L15_a2 (B),
+            1A answer-only SFT (ref1a@50), noCoT fmt@25 (A selected), C2 recheck_len prompt]
+  fig_test: [untrained, GEPA prompt (teacher), GEPA LoRA x1 (3 seeds), "GEPA LoRA x1.5 (3 seeds, C1)",
+             steer last_L15_a2 (B), 1A answer-only SFT (3 seeds), noCoT fmt@25 (A selected), KL-matched random LoRA (3)]
+  palette: ["#6b6b66", "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7", "#e34948"]

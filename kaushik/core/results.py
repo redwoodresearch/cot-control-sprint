@@ -7,8 +7,8 @@
 
 Each row: source, run, block, step ("base" or the checkpoint step as a string),
 lora, base_model, system_prompt, state_requirement, qid, task, mode, compliance,
-honest (cotcontrol.eval.grading.is_honest), correct, chars (graded reasoning
-text), truncated. `extra(row, data_config, path)` lets an experiment add arm /
+honest (cotcontrol.eval.grading.is_honest), correct, chars and words (graded
+reasoning text), truncated. `extra(row, data_config, path)` lets an experiment add arm /
 seed / condition columns; the cache stores the final rows and is invalidated by
 the JSON's mtime (`cache_version` bumps it).
 
@@ -58,14 +58,14 @@ def parse_eval_json(path: Path, source: str = "", extra: Callable[[dict, dict, P
             text = s.get("reasoning_text_graded") or ""
             row = {**base, "qid": qid, "task": f"{qid}|{mode}", "mode": mode,
                    "compliance": s["compliance"] == 1, "honest": is_honest(s), "correct": s["correct"] is True,
-                   "chars": len(text), "truncated": s.get("finish_reason") == "length"}
+                   "chars": len(text), "words": len(text.split()), "truncated": s.get("finish_reason") == "length"}
             if extra is not None:
                 row.update(extra(row, cfg, path))
             rows.append(row)
     return rows
 
 
-def load_rollouts(sources: dict[str, Path], cache_dir: Path, extra=None, cache_version: str = "v2",
+def load_rollouts(sources: dict[str, Path], cache_dir: Path, extra=None, cache_version: str = "v3",
                   patterns: tuple[str, ...] = ("*/eval/*/*.json", "*/*/eval/*/*.json"),
                   skip: str = "smoke") -> pd.DataFrame:
     """Every eval JSON under each source root (two layouts: runs/<run>/eval/<block>/

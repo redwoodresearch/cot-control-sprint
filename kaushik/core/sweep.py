@@ -32,6 +32,7 @@ import yaml
 from kaushik.core.config import (
     apply_overrides,
     dump_yaml,
+    eval_sections,
     parse_overrides,
     resolve,
     run_dir_of,
@@ -100,10 +101,30 @@ def diff_keys(a, b, prefix: str = "") -> list[str]:
     return []
 
 
-def check_equivalence(configs: list[tuple[dict, dict]], paths: list[Path]) -> dict:
+def as_train_eval_sees(view: dict, sections: tuple[str, ...] = ("eval",)) -> dict:
+    """Eval blocks (of every listed section) with scripts/train_eval.py's DEFAULT_EVAL
+    filled in, so two configs that train_eval reads identically compare equal (e.g. an
+    explicit `tensor_parallel_size: 1` versus the default)."""
+    from kaushik.core.jobs import te
+
+    default = te().DEFAULT_EVAL
+    out = dict(view)
+    for section in sections:
+        ev = view.get(section)
+        if not isinstance(ev, dict) or not ev:
+            continue
+        if any(isinstance(v, dict) for v in ev.values()):
+            out[section] = {k: ({**default, **v} if isinstance(v, dict) else v) for k, v in ev.items()}
+        else:
+            out[section] = {**default, **ev}
+    return out
+
+
+def check_equivalence(configs: list[tuple[dict, dict]], paths: list[Path], strict: bool = False) -> dict:
     """Compare expanded train_eval configs with existing YAMLs by run_name.
     -> {run_name: {"status": equal|differs|missing, "diffs": [...], "path": str}} plus
-    "_unmatched": existing files no point reproduces."""
+    "_unmatched": existing files no point reproduces. Unless `strict`, eval blocks are
+    compared as train_eval sees them (DEFAULT_EVAL filled on both sides)."""
     existing = {}
     for p in paths:
         raw = yaml.safe_load(Path(p).read_text())
@@ -113,13 +134,15 @@ def check_equivalence(configs: list[tuple[dict, dict]], paths: list[Path]) -> di
     for point, cfg in configs:
         name = cfg["run_name"]
         view = train_eval_config(cfg)
+        sections = tuple(eval_sections(cfg))
+        norm = (lambda d: d) if strict else (lambda d, s=sections: as_train_eval_sees(d, s))
         if name not in existing:
             report[name] = {"status": "missing", "diffs": [], "path": None}
             continue
         matched.add(name)
         statuses = []
         for path, raw in existing[name]:
-            diffs = diff_keys(apply_overrides(view, {}), raw)
+            diffs = diff_keys(norm(apply_overrides(view, {})), norm(raw))
             statuses.append({"status": "equal" if not diffs else "differs", "diffs": diffs, "path": rel(path)})
         report[name] = statuses[0] if len(statuses) == 1 else {"status": "multi", "per_file": statuses}
     report["_unmatched"] = sorted(rel(p) for n, lst in existing.items() if n not in matched for p, _ in lst)
@@ -173,6 +196,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--dry-run", action="store_true", help="print expanded configs; dispatch nothing")
     ap.add_argument("--show", action="store_true", help="with --dry-run: print the full resolved YAML of every point")
     ap.add_argument("--check", nargs="+", metavar="GLOB", help="existing config YAMLs to compare against")
+    ap.add_argument("--strict", action="store_true", help="with --check: raw YAML equality (no DEFAULT_EVAL filling)")
     ap.add_argument("--write", action="store_true", help="write runs/<run>/config.yaml without launching")
     ap.add_argument("--cap", type=int, default=None, help="GPU cap (default: sweep max_gpus or defaults.yaml)")
     ap.add_argument("--runs-dir", default=None, help="scheduler state dir (default: parent of the run dirs)")
@@ -185,7 +209,7 @@ def main(argv: list[str] | None = None) -> None:
           f"{len(configs)} points")
     if a.check:
         paths = sorted({Path(p) for pat in a.check for p in glob.glob(str(ROOT / pat) if not Path(pat).is_absolute() else pat)})
-        ok = print_report(check_equivalence(configs, paths))
+        ok = print_report(check_equivalence(configs, paths, strict=a.strict))
         print("config equivalence:", "PASS" if ok else "FAIL")
         if not ok:
             raise SystemExit(1)

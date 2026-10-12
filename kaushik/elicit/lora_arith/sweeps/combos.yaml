@@ -1,0 +1,26 @@
+# Every combined adapter built on the volume (runs/_combos/<name>.json): the two seed-0 screens (sweep.sh,
+# sweep2.sh), the three test-seed combinations of the selected GEPA - 2.0 x brevity, and the rank-32 load
+# test (GEPA s0 - GEPA s1). Evaluated by screen.yaml / screen2.yaml / test.yaml (candidate.requires gates
+# each eval on its record).
+#   run.py sweep elicit/lora_arith/sweeps/combos.yaml --dry-run
+experiment: elicit/lora_arith
+job: combine
+run_name: "{name}"
+axes:
+  - - {_label: {name: gepa_m0.5b_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -0.5]]}
+    - {_label: {name: gepa_m1.0b_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -1]]}
+    - {_label: {name: gepa_m1.5b_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -1.5]]}
+    - {_label: {name: gepa_p0.5v_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/verbose_s{seed}/checkpoint-400", 0.5]]}
+    - {_label: {name: gepa_p1.0v_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/verbose_s{seed}/checkpoint-400", 1]]}
+    - {_label: {name: gepa_m1.0b_p1.0v_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -1], ["/checkpoints/lora_arith/verbose_s{seed}/checkpoint-400", 1]]}
+    # sweep2.sh
+    - {_label: {name: gepa_m2.0b_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -2]]}
+    - {_label: {name: gepa_m2.5b_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -2.5]]}
+    - {_label: {name: gepa_p2.0v_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/verbose_s{seed}/checkpoint-400", 2]]}
+    - {_label: {name: gepa_m1.5b_p0.5v_s0, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -1.5], ["/checkpoints/lora_arith/verbose_s{seed}/checkpoint-400", 0.5]]}
+    # test seeds of the selected combination (GEPA seed k - 2 x brevity seed k)
+    - {_label: {name: gepa_m2.0b_s1, seed: 1}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -2]]}
+    - {_label: {name: gepa_m2.0b_s2, seed: 2}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400", 1], ["/checkpoints/lora_arith/brief_s{seed}/checkpoint-400", -2]]}
+    # rank-32 load test: GEPA s0 - GEPA s1 (verifies the concatenation; max rel err 3.4e-7)
+    - {_label: {name: test_s0_minus_s1, seed: 0}, arith.terms: [["/checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400", 1], ["/checkpoints/gepa_lora/gl_r16_lr1e-4_s1/checkpoint-400", -1]]}
+max_gpus: 24

@@ -1,0 +1,11 @@
+# The 6 length-prompt distillations (B2's trainer, data and hyperparameters; checkpoints under
+# /checkpoints/lora_arith): brevity and verbosity teachers x seeds 0-2.
+#   run.py sweep elicit/lora_arith/sweeps/train.yaml --dry-run
+experiment: elicit/lora_arith
+job: distill
+run_name: "{teacher}_s{seed}"
+axes:
+  - - {_label: {teacher: brief}, distill.teacher.system_prompt: "Keep your reasoning brief."}
+    - {_label: {teacher: verbose}, distill.teacher.system_prompt: "Reason thoroughly and at length before answering."}
+  - [{_label: {seed: 0}, distill.seed: 0}, {_label: {seed: 1}, distill.seed: 1}, {_label: {seed: 2}, distill.seed: 2}]
+max_gpus: 24

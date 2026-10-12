@@ -2,8 +2,10 @@
 
 Owner agent: B2 (coordinator notes: kaushik/elicit/COORDINATOR.md). Budget $150; stop new launches at $120.
 Apps: `cot-control-sprint_kaushik-reddy_sub-gepa-lora_{inference,train,distill}` (all deployed 2026-10-09).
-Env for every command: `export COTCONTROL_MODAL_INFERENCE_APP=cot-control-sprint_kaushik-reddy_sub-gepa-lora_inference
-COTCONTROL_MODAL_TRAIN_APP=cot-control-sprint_kaushik-reddy_sub-gepa-lora_train`, then `.venv/bin/python kaushik/run.py elicit/gepa_lora <stage>`.
+Commands: `.venv/bin/python kaushik/run.py elicit/gepa_lora <job>` / `run.py sweep elicit/gepa_lora/sweeps/<name>.yaml`
+(config.yaml names the sub-apps; no env exports needed). Migrated to kaushik/core + kaushik/elicit/common on 2026-10-12
+(README "Layout and commands"): cli.py / gl_common.py / distill_app.py deleted, configs + sweeps reproduce every run,
+results byte-identical. Nothing running.
 
 ## Method (see README.md)
 Teacher = base + GEPA s1 prompt (sha pinned in ../gepa_distill/gd_common.py); student = base + LoRA (r16, a32, q/k/v/o).

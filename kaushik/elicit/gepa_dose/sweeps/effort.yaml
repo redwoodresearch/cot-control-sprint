@@ -1,0 +1,16 @@
+# Reasoning-effort sweep (40 val questions, subsample seed 1): LoRA x1 at `high`, the GEPA prompt at `high`,
+# the untrained model at `high`.
+experiment: elicit/gepa_dose
+job: evalrun
+run_name: "{name}_high_sw"
+axes:
+  - - {_label: {name: x1}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400}
+    - {_label: {name: prompt}, eval.block.system_prompt: monitorability/prompts/gepa_general.txt}
+    - {_label: {name: untrained}}
+overrides:
+  eval.block.split: val
+  eval.block.max_samples: 40
+  eval.block.subsample_seed: 1
+  eval.block.chat_template_kwargs: {reasoning_effort: high}
+  candidate.chunk: 400
+max_gpus: 24

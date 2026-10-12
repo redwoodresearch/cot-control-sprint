@@ -1,0 +1,11 @@
+# Test (500 q) of the selected config (lr 1e-4, step 400) with all 3 seeds.
+experiment: elicit/gepa_lora
+job: evalrun
+run_name: "lr1e-4_c400_test_s{seed}"
+axes:
+  - - {_label: {seed: 0}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400}
+    - {_label: {seed: 1}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s1/checkpoint-400}
+    - {_label: {seed: 2}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s2/checkpoint-400}
+overrides:
+  eval.block.split: test
+max_gpus: 24

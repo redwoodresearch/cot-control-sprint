@@ -1,0 +1,63 @@
+# The one wave (README arms table): 5 arms x 3 seeds = 15 runs; train_eval.py trains, the core eval job
+# evaluates every block at its eval_at_steps once train_result.json exists.
+#   run.py sweep elicit/nocot_sft/sweeps/train.yaml --check "kaushik/elicit/nocot_sft/configs/*.yaml" "kaushik/elicit/nocot_sft/runs/nocot-*-seed?/config.yaml"
+#   run.py sweep elicit/nocot_sft/sweeps/train.yaml --dry-run
+experiment: elicit/nocot_sft
+job: train
+after: [eval]
+run_name: "nocot-{arm}-gptoss20b-seed{seed}"
+seeds: [0, 1, 2]
+axes:
+  - - _label: {arm: gentle}            # 1A data at a gentler dose: r8/a8, lr 5e-5, 100 steps
+      train.data_path: kaushik/fragility/data/mcq_noreason.jsonl
+      train.lr: 5.0e-05
+      train.num_epochs: 3
+      train.max_steps: 100
+      train.save_at_steps: [50, 100]
+      lora.lora_rank: 8
+      lora.lora_alpha: 8
+      eval.val_modes.eval_at_steps: &g [50, 100]
+      eval.val_heldout.eval_at_steps: *g
+      eval.val_baseline.eval_at_steps: *g
+      eval.final_modes.eval_at_steps: &gf [100]
+      eval.final_heldout.eval_at_steps: *gf
+      eval.final_baseline.eval_at_steps: *gf
+    - _label: {arm: mix}               # answer-only + reasoning-on anchor rows (<= 4096 sampled tokens)
+      train.data_path: kaushik/elicit/nocot_sft/data/mix.jsonl
+      train.max_steps: 100
+      train.save_at_steps: [50, 100]
+      train.per_device_batch_size: 4
+      train.gradient_checkpointing: true
+      train.max_seq_length: 4608
+      eval.val_modes.eval_at_steps: &m [50, 100]
+      eval.val_heldout.eval_at_steps: *m
+      eval.val_baseline.eval_at_steps: *m
+      eval.final_modes.eval_at_steps: &mf [100]
+      eval.final_heldout.eval_at_steps: *mf
+      eval.final_baseline.eval_at_steps: *mf
+    - _label: {arm: fmt}               # constrained-output rows, 1A dose (config.yaml defaults: 50 steps, [25, 50])
+      train.data_path: kaushik/elicit/nocot_sft/data/fmt.jsonl
+    - _label: {arm: fmt_mix}           # fmt + anchor
+      train.data_path: kaushik/elicit/nocot_sft/data/fmt_mix.jsonl
+      train.max_steps: 100
+      train.save_at_steps: [50, 100]
+      train.per_device_batch_size: 4
+      train.gradient_checkpointing: true
+      train.max_seq_length: 4608
+      eval.val_modes.eval_at_steps: &x [50, 100]
+      eval.val_heldout.eval_at_steps: *x
+      eval.val_baseline.eval_at_steps: *x
+      eval.final_modes.eval_at_steps: &xf [100]
+      eval.final_heldout.eval_at_steps: *xf
+      eval.final_baseline.eval_at_steps: *xf
+    - _label: {arm: fmt_long}          # fmt at 3x the dose (launched 14:32 on the mid-checkpoint val numbers)
+      train.data_path: kaushik/elicit/nocot_sft/data/fmt.jsonl
+      train.max_steps: 150
+      train.save_at_steps: [75, 150]
+      eval.val_modes.eval_at_steps: &l [75, 150]
+      eval.val_heldout.eval_at_steps: *l
+      eval.val_baseline.eval_at_steps: *l
+      eval.final_modes.eval_at_steps: &lf [150]
+      eval.final_heldout.eval_at_steps: *lf
+      eval.final_baseline.eval_at_steps: *lf
+max_gpus: 32

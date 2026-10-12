@@ -1,0 +1,13 @@
+# KL-matched random-LoRA control for the selected config (3 trained seeds -> 3 noise adapters);
+# the anchored config's group was cancelled after its val result.
+experiment: elicit/gepa_lora
+job: noise
+run_name: "noise-{group}"          # job state only; outputs go to runs/_noise/<group>/
+axes:
+  - - _label: {group: gl_r16_lr1e-4_c400}
+      noise.adapters: [/checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400,
+                       /checkpoints/gepa_lora/gl_r16_lr1e-4_s1/checkpoint-400,
+                       /checkpoints/gepa_lora/gl_r16_lr1e-4_s2/checkpoint-400]
+overrides:
+  noise.group: "{group}"
+max_gpus: 24

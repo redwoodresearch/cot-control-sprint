@@ -1,0 +1,26 @@
+# Workstream C3: LoRA arithmetic, GEPA LoRA minus brevity (README.md). Protocol, trainer defaults, noise
+# recipe and analysis come from ../config.yaml; this file names the Modal sub-apps, the length-teacher
+# prompts, the checkpoint roots and the combiner's knobs. Sweeps: sweeps/*.yaml.
+extends: ../config.yaml
+modal:
+  sub: lora-arith
+  apps:
+    distill: {file: kaushik/elicit/common/distill_app.py}
+    arith: {file: kaushik/elicit/lora_arith/arith_app.py}
+    random-lora: {module: cotcontrol.training.random_lora}
+distill:
+  out_root: /checkpoints/lora_arith
+  save_at: [100, 200, 300, 400]
+  teacher:                   # a literal prompt (brevity / verbosity), not the GEPA file: see `teachers`
+    system_prompt: "Keep your reasoning brief."
+    sha256: null
+teachers:                    # neutral length prompts distilled with B2's pipeline (same data, positions, hyperparameters)
+  brief: "Keep your reasoning brief."
+  verbose: "Reason thoroughly and at length before answering."
+arith:                       # combine.py: weight-space combination on the volume (arith_app.py)
+  combos_dir: /checkpoints/lora_arith/combos
+  gepa_adapter: "/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400"   # B2's adapters
+  terms: []                  # [[adapter_dir, coeff], ...]: delta = sum coeff * delta_i
+  overwrite: false
+noise:
+  out_root: /checkpoints/lora_arith/noise

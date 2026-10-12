@@ -1,0 +1,19 @@
+# Workstream B2: no-CoT context-distilled "GEPA LoRA" (README.md). Everything shared with the other
+# elicit workstreams (protocol, trainer defaults, noise recipe, analysis) comes from ../config.yaml;
+# this file names the Modal sub-apps and the data builder's knobs. Sweeps: sweeps/*.yaml.
+extends: ../config.yaml
+modal:
+  sub: gepa-lora
+  apps:
+    distill: {file: kaushik/elicit/common/distill_app.py}
+    random-lora: {module: cotcontrol.training.random_lora}
+data:                        # build_data.py: train-split questions x the 9 training modes -> data/
+  out: kaushik/elicit/gepa_lora/data
+  split: train
+  holdout_frac: 0.1          # questions kept out of the gradient (distillation-loss tracking)
+  seed: 0
+  assign_seed: 0             # question -> mode assignment (cotcontrol.eval.data.assign_tasks)
+probe:                       # probe.py: first-reasoning-token check in the vLLM path
+  lora: null
+  n: 8
+  max_tokens: 24

@@ -55,28 +55,43 @@ Infra: a custom single-GPU loop (HF + PEFT) in a Modal app `..._sub-gepa-lora_di
 eager attention). Rows longer than 2048 tokens (teacher rendering) are dropped; micro-batches are packed under
 token/position budgets because eager attention and full-vocab logits are the memory hogs.
 
-## Stages
+## Layout and commands (migrated to `kaushik/core` + `kaushik/elicit/common`, 2026-10-12)
 
-```
-export COTCONTROL_MODAL_INFERENCE_APP=cot-control-sprint_kaushik-reddy_sub-gepa-lora_inference
-export COTCONTROL_MODAL_TRAIN_APP=cot-control-sprint_kaushik-reddy_sub-gepa-lora_train
-R=".venv/bin/python kaushik/run.py elicit/gepa_lora"
-$R build_data                      # data/prompts.jsonl, data/drift.jsonl
-$R deploy                          # distill app (after editing distill_app.py)
-$R train --run NAME --lr 1e-4 [--w-anchor 1 --w-turn .3 --w-first .3] [--seed k]
-$R status [--run NAME]             # call state + log.jsonl tail (runs/<run>/log.jsonl)
-$R probe --lora /checkpoints/gepa_lora/<run>/checkpoint-N   # vLLM path: first-token check vs teacher
-$R launch <run>_val -- --split val --lora /checkpoints/gepa_lora/<run>/checkpoint-N [;; ...]
-$R noise --group G --adapters A,B,C                            # KL-matched random LoRAs
-$R analyze [--runs ...]            # results/table.md (+ Workstream B's teacher/untrained rows)
-$R spend
+Every hyperparameter is YAML: `kaushik/config/defaults.yaml` (model table, eval protocol) < `../config.yaml`
+(the elicit protocol, trainer defaults, noise recipe, analysis) < `config.yaml` (this workstream's Modal sub-apps,
+data builder) < a sweep point < `key=value` on the command line. The code is shared: `evalrun.py`, `distill.py`,
+`noise.py`, `analyze.py`, `deploy.py` are two-line shims onto `../common/` (one candidate-eval runner, one
+trainer, one noise module, one analysis for every elicit workstream); `build_data.py` and `probe.py` are this
+folder's own jobs (`main(cfg, argv)`).
+
+```bash
+R=".venv/bin/python kaushik/run.py"
+$R elicit/gepa_lora build_data                                  # data/prompts.jsonl, data/drift.jsonl, data/meta.json
+$R elicit/gepa_lora deploy                                      # distill + random-lora apps (bash kaushik/deploy_modal.sh sub-gepa-lora for inference/train)
+$R sweep elicit/gepa_lora/sweeps/train.yaml --dry-run          # 6 distillations (lr 1e-4 plain / anchored x 3 seeds); train_lr3e-4.yaml the 7th
+$R elicit/gepa_lora distill --status                           # call state + trainer log tail
+$R elicit/gepa_lora probe probe.lora=/checkpoints/gepa_lora/<run>/checkpoint-N
+$R sweep elicit/gepa_lora/sweeps/val.yaml --dry-run            # full val of the 3 seed-0 adapters; test.yaml: 3 seeds on test
+$R sweep elicit/gepa_lora/sweeps/noise.yaml --dry-run          # KL-matched random LoRAs; noise_test.yaml evaluates them
+$R elicit/gepa_lora evalrun --status
+$R elicit/gepa_lora analyze --runs ... [--boot N] --out results/<table>.md
+.venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_lora/sweeps/*.yaml   # config equivalence
 ```
 
-## Files
-`gl_common.py` constants · `build_data.py` · `distill_app.py` trainer · `cli.py` · `evalrun.py` (same format as
-Workstream B) · `probe.py` · `noise.py` · `analyze.py` (wraps Workstream B's analyze for identical definitions) ·
-`data/` · `runs/<run>/{train.json,log.jsonl,result.json,<block>.json,manifest.json,eval.log}` ·
-`runs/_probe/`, `runs/_noise/` · `results/`.
+`runs/<run>/{train.json,log.jsonl,result.json}` (trainings), `runs/<run>/{<block>.json,manifest.json}` (evals; every
+rollout + judge output), `runs/_probe/`, `runs/_noise/<group>/` and `results/` are unchanged.
+
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
+
+- Config equivalence (`common/check.py`): the sweeps reproduce the trainer config of all 7 `runs/*/train.json`,
+  the manifests of all 9 eval runs and the noise group record, with no differences. Chunk sizes are not in the
+  manifests and cannot be checked.
+- Analysis equivalence: every committed table is byte-identical after re-running `analyze` with the run list of
+  its JSON and the draw count its author used (the shared default is 1000; the val tables were made with fewer):
+  `test_table` and `test_table_prelim` at 1000 draws, `val_table` and `val_table_plain` at `--boot 500`,
+  `refs_val` at `--boot 200` (run lists: `results/<table>.json` -> `runs`).
+- The anchored seeds 1-2 trainings have `train.json` only (their `result.json` was never fetched); a dry run lists
+  them as "would run", which for a launched run means resume polling, never respawn.
 
 ## Results so far (val, 200 q; 95% CIs over questions; `results/val_table.md`)
 

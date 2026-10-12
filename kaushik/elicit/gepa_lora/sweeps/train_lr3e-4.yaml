@@ -1,0 +1,8 @@
+# The single higher-lr distillation (seed 0 only; not taken to test).
+experiment: elicit/gepa_lora
+job: distill
+run_name: "gl_r16_lr{lr}_s{seed}"
+axes:
+  - [{_label: {lr: 3e-4}, distill.lr: 3.0e-4}]
+  - [{_label: {seed: 0}, distill.seed: 0}]
+max_gpus: 24

@@ -20,28 +20,56 @@ LoRA was split off to `kaushik/elicit/gepa_lora/` on 2026-10-09 14:00 PT).
    × 9 modes, then the best settings on full val and test, with a random direction of equal norm at the same layer as the
    control.
 
-## Stages (`kaushik/run.py elicit/gepa_distill <stage>`; export the sub-gepa-distill app names first, see STATE.md)
+## Layout and commands (migrated to `kaushik/core` + `kaushik/elicit/common`, 2026-10-12)
 
-| stage | what |
-|---|---|
-| `eval --run R --split val\|test [--system-prompt gepa] [--base-model PATH] [--lora PATH] [--blocks ...] [--max-questions N --subsample-seed S]` | one candidate, blocks modes / heldout / baseline -> `runs/R/<block>.json` |
-| `launch R -- args ;; R2 -- args` | detached eval processes (`runs/R/eval.log`, `runs/R/pid`) |
-| `steer extract\|build\|sweep\|cleanup` | vectors -> steered checkpoints on the volume -> subset evals -> delete |
-| `analyze [--runs ...]` | table with 95% bootstrap CIs over questions -> `results/table.md` + `.json` |
-| `spend` | Modal spend of this workstream |
+Every run is a point of a sweep in `sweeps/` resolved through `kaushik/elicit/config.yaml` (protocol, GEPA prompt
+pin, analysis definitions) < `config.yaml` (Modal sub-apps, the `steer:` knobs). The eval runner, analysis and
+deploy job are the shared `kaushik/elicit/common/` modules (`evalrun.py`, `analyze.py`, `deploy.py` here are
+two-line shims); `steer.py` + `steer_app.py` are this folder's own jobs.
+
+```bash
+R=".venv/bin/python kaushik/run.py"
+$R sweep elicit/gepa_distill/sweeps/refs.yaml --dry-run          # teacher_val, untrained_val, teacher_test
+$R elicit/gepa_distill deploy steer                               # steer_app.py as ..._sub-gepa-distill_steer
+$R elicit/gepa_distill steer extract                              # GEPA vectors v1 (steer.extract: 300 train pairs, seed 1)
+$R elicit/gepa_distill steer extract steer.extract.prompt=brevity steer.extract.name=vbrief
+$R elicit/gepa_distill steer build                                # last_L{6,9,12,15}_a{1,2,4} (steer.build)
+$R elicit/gepa_distill steer build steer.build.kind=resid steer.build.proj=vbrief
+$R elicit/gepa_distill steer build steer.build.kind=random steer.build.layers=[15] steer.build.alphas=[2]
+$R sweep elicit/gepa_distill/sweeps/steer_sweep.yaml --dry-run   # 24 x (40 val q x 9 modes) -> runs/sw_*
+$R sweep elicit/gepa_distill/sweeps/steer_final.yaml --dry-run   # selected variants + control, full val / test
+$R elicit/gepa_distill steer cleanup --variants last_L12_a1,...  # delete the 13 GB checkpoints
+$R elicit/gepa_distill analyze --runs ... [--boot N] [--out results/<name>.md]
+.venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_distill/sweeps/*.yaml   # config equivalence
+```
+
+Results files and the exact analyze calls that reproduce them (bootstrap seed 0; the draw counts differ per
+file because the author picked `--boot` per call; `--boot` defaults to `analysis.bootstrap_draws` = 1000):
+
+| file | `--runs` | `--boot` |
+|---|---|---|
+| `results/table.*` | teacher_val,untrained_val,teacher_test,st_last_L15_a2_val,st_last_L15_a2_test,st_last_L12_a1_val,st_last_L12_a1_test,st_random_L15_a2_test,st_resid_L12_a2_test | 1000 |
+| `results/sweep.*` | the 24 `sw_*` runs (sorted) | 300 |
+| `results/teacher_check.*` | teacher_val,untrained_val,teacher_test | 1000 |
+| `results/teacher_check_val.*` | teacher_val,untrained_val | 1000 |
 
 Untrained test reference: the fragility checkpoint-0 test evals (zero adapter = base model, identical protocol),
-`gd_common.UNTRAINED_TEST`, reused instead of a second untrained test run.
+`analysis.untrained_test` in `kaushik/elicit/config.yaml`, reused instead of a second untrained test run; the
+`untrained_test` row is added by `analyze` for every test-split table.
 
-## Layout
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
 
-```
-gd_common.py   paths, prompt + sha256, eval protocol, app names      evalrun.py   candidate eval (chunked, GPU-slot capped)
-steer_app.py   Modal app: extract / build_checkpoint / remove_path   steer.py     local driver for the steering pipeline
-analyze.py     metrics + bootstrap                                   cli.py       stages
-runs/<run>/    eval JSONs (every rollout + judge output), manifest, log; runs/steer/ vectors + checkpoint records
-results/       table.md / table.json
-```
+- Config equivalence: `common/check.py` compares every sweep point with the run's `manifest.json` (split, engine
+  model, prompt length, effort, blocks, question subset, generate config): refs 3/3, steer_sweep 24/24,
+  steer_final 6/6 OK, no differences. `candidate.chunk` (400 for the screen) is not recorded in the manifests
+  and is taken from STATE.md.
+- Analysis equivalence: `table`, `sweep`, `teacher_check` and `teacher_check_val` (`.md` and `.json`) are
+  byte-identical after re-running `analyze` with the calls above.
+- Deleted: `cli.py` (its `distill` stage pointed at a `distill.py` that never existed after the LoRA work moved to
+  `gepa_lora/`), `gd_common.py` (constants now in the YAML configs; the GEPA prompt pin is `distill.teacher` in
+  `kaushik/elicit/config.yaml`), `evalrun.py` (the shared `common/candidate_eval.py`). `steer sweep` (which
+  launched evals through `launch`) is `sweeps/steer_sweep.yaml`. GPU capping moved from `runs/_gpu_slots` to the
+  core scheduler (`--cap`, `<runs>/.gpu_cap`).
 
 ## Results (2026-10-09; `results/table.md`, 95% bootstrap CIs over questions; honest metric, values in %)
 

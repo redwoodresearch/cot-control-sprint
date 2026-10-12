@@ -1,0 +1,12 @@
+# The 7 distillation runs (STATE.md): lr 1e-4 x 3 seeds (plain: w_turn 1, w_first 2), lr 3e-4 seed 0,
+# and the header-anchored length-preserving variant x 3 seeds (w_turn .3, w_first .3, w_anchor 1).
+#   run.py sweep elicit/gepa_lora/sweeps/train.yaml --dry-run
+#   .venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_lora/sweeps/train.yaml
+experiment: elicit/gepa_lora
+job: distill
+run_name: "gl_r16_lr{lr}{variant}_s{seed}"
+axes:
+  - - {_label: {lr: 1e-4, variant: ""}, distill.lr: 1.0e-4}
+    - {_label: {lr: 1e-4, variant: _anchor}, distill.lr: 1.0e-4, distill.w_turn: 0.3, distill.w_first: 0.3, distill.w_anchor: 1.0}
+  - [{_label: {seed: 0}, distill.seed: 0}, {_label: {seed: 1}, distill.seed: 1}, {_label: {seed: 2}, distill.seed: 2}]
+max_gpus: 24

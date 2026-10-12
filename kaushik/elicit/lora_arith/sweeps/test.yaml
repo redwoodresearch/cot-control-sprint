@@ -1,0 +1,11 @@
+# Test (500 q, all 3 blocks) of the selected combination with 3 seeds (combos gepa_m2.0b_s{k} from combos.yaml).
+experiment: elicit/lora_arith
+job: evalrun
+run_name: "gepa_m2.0b_test_s{seed}"
+axes:
+  - [{_label: {seed: 0}}, {_label: {seed: 1}}, {_label: {seed: 2}}]
+overrides:
+  eval.block.split: test
+  candidate.lora: "/checkpoints/lora_arith/combos/gepa_m2.0b_s{seed}"
+  candidate.requires: ["kaushik/elicit/lora_arith/runs/_combos/gepa_m2.0b_s{seed}.json"]
+max_gpus: 24

@@ -1,0 +1,63 @@
+# Workstream A: no-CoT SFT on gpt-oss-20b (README.md). Standalone (does not extend ../config.yaml: every
+# non-core section of a parent would leak into the train_eval view). Per-arm values (data, LoRA, lr, steps,
+# save/eval steps, long-sequence settings) come from the sweep points in sweeps/train.yaml.
+model: gptoss20b
+profiles: [reasoning_off, sft]     # reasoning-off rows: reasoning_effort low + the masked empty-analysis prefill
+modal: {sub: nocot-sft}            # cot-control-sprint_kaushik-reddy_sub-nocot-sft_{inference,train}
+run_name: "nocot-{arm}-gptoss20b-seed{seed}"
+run_dir: "kaushik/elicit/nocot_sft/runs/{run_name}"
+arm: "{arm}"
+model_key: "{model}"
+train:
+  shuffle: true
+  seed: 0
+  lr: 0.00015
+  lr_scheduler_type: constant
+  batch_size: 48
+  num_epochs: 2
+  max_steps: 50
+  max_seq_length: 1024
+  save_at_steps: [25, 50]
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+eval:
+  block:                           # shared protocol (defaults.yaml: dataset all, seed 0, T=1, 16k; model: medium effort)
+    system_prompt: ""
+    state_requirement: true
+    chunk_parallel: 2              # PEAK engines per run (12 runs -> 24 GPUs)
+    parallel_checkpoints: 2
+  val_modes:    {split: val, chunk: 450, eval_at_steps: [25, 50], mode: all}
+  val_heldout:  {split: val, chunk: 450, eval_at_steps: [25, 50], mode: all, allowed_modes: [start_of_sentence, letter_suppression, no_spaces]}
+  val_baseline: {split: val, chunk: 450, eval_at_steps: [25, 50], mode: baseline}
+  final_modes:    {split: test, chunk: 500, eval_at_steps: [50], mode: all}
+  final_heldout:  {split: test, chunk: 500, eval_at_steps: [50], mode: all, allowed_modes: [start_of_sentence, letter_suppression, no_spaces]}
+  final_baseline: {split: test, chunk: 500, eval_at_steps: [50], mode: baseline}
+registry:                          # core `registry` job (the committed step-25 entries were written by the old registry.py)
+  noise: true
+  measure_kl: true
+  noise_eval_blocks: "kaushik/elicit/nocot_sft/configs/{run_name}.yaml#final"
+  config_path: "kaushik/elicit/nocot_sft/configs/{run_name}.yaml"
+  extra: {n_seeds: 3, arm: "{arm}"}   # arm: core reads meta.arm, which this config cannot carry (CLI: registry.extra.arm=fmt)
+data:                              # gen_answers.py / build_data.py
+  out: kaushik/elicit/nocot_sft/data
+  pool: kaushik/fragility/data/mcq_pool.json
+  answer_only: kaushik/fragility/data/mcq_noreason.jsonl           # 1A rows, used in place
+  reason: kaushik/fragility/data/mcq_reason_gptoss20b.jsonl        # the model's own medium-effort rollouts (anchor)
+  answer_template: "{question}\n{options}\nAnswer with a single letter on the first line, then explain your choice in one or two sentences."
+  sampling: {temperature: 1.0, max_tokens: 3000, seed: 0, chunk: 350}   # gen_answers: eval setting (reasoning on, medium)
+  anchor_render: {chat_template_kwargs: {reasoning_effort: medium}, assistant_prefill: null}   # per-row render override
+  modes_per_item: 2
+  seed: 0
+  fmt_modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence, meow_between_words,
+              repeat_sentences, end_of_sentence_indeed, bark_between_words, no_comma, title_case, bracket_words,
+              paren_words, quote_wrap, question_terminators, one_sentence_per_line, capitalize_and]
+analysis:                          # analyze.py
+  bootstrap_draws: 1000
+  bootstrap_seed: 0
+  degen_chars: 200
+  guard_acc: 0.03                  # selection guardrails: baseline accuracy within 3 pts, median chars >= 80 %
+  guard_len: 0.8
+  fragility_runs: kaushik/fragility/runs                            # 1A seeds 0-2 step 50 + seed-0 checkpoint-0 (test)
+  noise_runs: kaushik/noise/runs                                    # noise_1A + elicit-nocot_sft-* groups
+  arm_order: [untrained, 1A, noise_1A, gentle, mix, fmt, fmt_mix]

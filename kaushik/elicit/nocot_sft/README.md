@@ -56,15 +56,43 @@ of untrained, median chars ≥ 80% of untrained. The selection was frozen in `ST
 read; other arms' test numbers are exploratory. Noise controls (`kaushik/noise`, KL-matched random LoRAs) for the
 selected arm only.
 
-## Layout / reproducing
+## Layout / reproducing (migrated to `kaushik/core`, 2026-10-12)
+
+Every run config derives from `config.yaml` (model table in `kaushik/config/defaults.yaml`; profiles
+`reasoning_off` + `sft` give the 1A rendering convention) plus a point of a sweep in `sweeps/`; experiment code
+is only `gen_answers.py`, `build_data.py` and `analyze.py` (each `main(cfg, argv)`). Training and evals are the
+core `train` / `eval` jobs (`scripts/train_eval.py`), the adapter hand-off the core `registry` job.
 
 ```bash
-R=".venv/bin/python kaushik/run.py elicit/nocot_sft"
-$R gen_answers && $R build_data && $R make_configs      # data/, configs/
-$R launch && $R ref_1a && $R status                     # runs/<run>/ (train_eval.py artifacts + manifest + launcher.log)
-$R analyze                                              # results/{val,test}_table.md, selection.json, rollouts.csv.gz
-$R registry --arms <selected>                           # kaushik/registry/*.json -> noise controls
+R=".venv/bin/python kaushik/run.py"
+$R elicit/nocot_sft gen_answers && $R elicit/nocot_sft build_data      # data/answers/, data/*.jsonl (+ manifests)
+$R sweep elicit/nocot_sft/sweeps/train.yaml --dry-run                  # 5 arms x 3 seeds: train, then every eval block
+$R sweep elicit/nocot_sft/sweeps/test_step25.yaml --dry-run            # eval-only test blocks of fmt @25 (3 seeds)
+$R sweep elicit/nocot_sft/sweeps/ref1a.yaml --dry-run                  # 1A adapter + checkpoint-0 on the val protocol
+$R elicit/nocot_sft status                                             # run dirs + scheduler state
+$R elicit/nocot_sft analyze                                            # results/{val,test}_table.md, summary.csv, selection.json, rollouts.csv.gz
+$R elicit/nocot_sft registry run_name=nocot-fmt-gptoss20b-seed0 registry.extra.arm=fmt --step 25 --name nocot-fmt-gptoss20b-seed0-step25 --dry-run
+$R sweep elicit/nocot_sft/sweeps/train.yaml --check "kaushik/elicit/nocot_sft/configs/*.yaml" "kaushik/elicit/nocot_sft/runs/nocot-*-seed?/config.yaml"
 ```
+
+The config names its Modal sub-apps (`modal: {sub: nocot-sft}`); `run.py` points cotcontrol at them before any
+Modal import.
+
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
+
+- Config equivalence: `sweeps/train.yaml` reproduces all 15 `configs/*.yaml` and `runs/nocot-*-seed?/config.yaml`,
+  `sweeps/test_step25.yaml` the 3 `runs/nocot-fmt-*-step25/config.yaml` (val blocks off, `source_run`,
+  `eval_at_steps: [25]`), `sweeps/ref1a.yaml` the `runs/ref1a-*/config.yaml` (fragility's train section, final
+  blocks off): `--check` prints PASS with no differences (`kaushik/elicit/tests/test_sweeps.py` keeps checking).
+- Analysis equivalence: `analyze` (1000 draws, seed 0) reproduces `results/{val,test}_table.md`, `summary.csv`,
+  `selection.json` byte-for-byte and `rollouts.csv.gz` after decompression. Its two-way cluster bootstrap
+  (`boot_draws`) is kept rather than mapped onto `kaushik/core/stats`, whose draw order differs.
+- Registry: the committed `kaushik/registry/nocot-fmt-gptoss20b-seed{0,1,2}-step25.json` were written by the old
+  `registry.py`; the core job writes a superset (`final_step`, `checkpoints`, `checkpoint_run_name`, all six
+  `val_blocks`) and lacks the old `step` / `final_blocks` / top-level `arm` split (`arm` comes from
+  `registry.extra.arm`). The entries are not rewritten.
+- Deleted: `cli.py`, `common.py`, `launch.py`, `make_configs.py`, `registry.py`. `configs/*.yaml` stay (registry
+  entries point at them), as do `runs/`, `data/`, `results/`.
 
 `data/*.manifest.json` carry sha256s and example rows; `runs/<run>/eval/<block>/checkpoint-<step>.json` hold every
 prompt, rollout and grade. Results: [`results/`](results/) (filled by `analyze`), narrative in `STATE.md`.

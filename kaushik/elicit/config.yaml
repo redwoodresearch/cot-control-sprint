@@ -1,0 +1,84 @@
+# Shared by the elicitation workstreams (kaushik/elicit/PLAN.md): gpt-oss-20b, the pre-registered eval
+# protocol (T=1, 16k tokens, reasoning_effort medium, honest metric; 9 training modes / 3 held-out modes /
+# unconstrained accuracy), the no-CoT distillation trainer defaults, the noise-control recipe and the
+# shared analysis definitions. Each workstream's config.yaml `extends:` this file and names its Modal
+# sub-apps (modal.sub). Code: kaushik/elicit/common/.
+model: gptoss20b
+run_dir: "kaushik/{experiment}/runs/{run_name}"
+
+eval:
+  block:                     # merged under every block below (defaults.yaml protocol + model.eval first)
+    system_prompt: ""        # '' = no prompt; a .txt path (repo-relative) = its stripped text; else literal
+    state_requirement: true
+    max_lora_rank: 64
+  modes: {mode: all}                                                           # 9 training modes x every question
+  heldout: {mode: all, allowed_modes: [start_of_sentence, letter_suppression, no_spaces]}   # 3 held-out modes
+  baseline: {mode: baseline}                                                   # unconstrained: accuracy guardrail
+
+candidate:                   # common/candidate_eval.py: one eval target -> runs/<run>/<block>.json
+  base_model: null           # engine model: null = the HF id above; a path = a steered checkpoint on the volume
+  lora: null                 # adapter path on the checkpoints volume, or null
+  blocks: [modes, heldout, baseline]
+  chunk: 300                 # prompts per engine call; each chunk holds one GPU (x tensor parallelism)
+  retries: 4                 # per-chunk retries, 60 s apart
+  requires: []               # local files that must exist before the eval is ready (e.g. a combo record)
+
+distill:                     # common/distill.py + distill_app.py: no-CoT context distillation (gepa_lora README)
+  out_root: /checkpoints/gepa_lora
+  data:
+    prompts: kaushik/elicit/gepa_lora/data/prompts.jsonl
+    drift: kaushik/elicit/gepa_lora/data/drift.jsonl
+    meta: kaushik/elicit/gepa_lora/data/meta.json
+  teacher:
+    system_prompt: monitorability/prompts/gepa_general.txt   # GEPA s1 (Workstream B pin)
+    sha256: 160d1c39e09bf6eb1fe0e147c1e8b9ccde5c4f98ba36bf066b16ff911fe61e3d
+    chat_template_kwargs: null                               # null = the student's (template_kwargs)
+  seed: 0
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.0
+  target_modules: [q_proj, k_proj, v_proj, o_proj]
+  lr: 1.0e-4
+  warmup_steps: 10
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  batch_size: 16
+  micro_bs: 8
+  max_steps: 400
+  save_at: [50, 100, 200, 300, 400]
+  w_turn: 1.0
+  w_first: 2.0
+  w_anchor: 0.0
+  holdout_cap: 256
+  drift_cap: 64
+  eval_every: 50
+  max_len: 2048              # drop rows whose teacher rendering is longer
+  tok_budget: 6144           # micro-batch packing: rows x max_len
+  pos_budget: 3072           #                      rows x max_k (full-vocab logits)
+  template_kwargs: {reasoning_effort: medium}
+  gpu: H200
+  timeout_s: 21600
+
+noise:                       # common/noise.py: KL-matched random LoRAs (kaushik/noise/README.md)
+  group: null
+  adapters: []               # the trained seeds' adapter paths
+  samples: kaushik/noise/runs/_samples/gptoss20b-82bf9e/samples.json   # the base model's own T=1 samples
+  out_root: /checkpoints/gepa_lora/noise
+  seeds: [0, 1, 2]
+  tol: 0.1
+  family: frob
+  scoring: {temperature: 1.0, max_tokens: 2048, seed: 0}
+  gpus: 4                    # concurrent engines (scheduler weight)
+
+analysis:                    # common/analyze.py (Workstream B's definitions)
+  bootstrap_draws: 1000
+  bootstrap_seed: 0
+  style: distill             # table layout: distill (gain recovered) | dose (heldout / baseline chars)
+  untrained_test:            # fragility checkpoint-0 = base model, same protocol, test split
+    modes: kaushik/fragility/runs/fragility-mcq_noreason-gptoss20b-seed0/eval/final_modes/checkpoint-0.json
+    heldout: kaushik/fragility/runs/fragility-mcq_noreason-gptoss20b-seed0/eval/final_heldout/checkpoint-0.json
+    baseline: kaushik/fragility/runs/fragility-mcq_noreason-gptoss20b-seed0/eval/final_baseline/checkpoint-0.json
+  refs:                      # reference runs symlinked into runs/ (Workstream B's teacher / untrained evals)
+    teacher_val: kaushik/elicit/gepa_distill/runs/teacher_val
+    untrained_val: kaushik/elicit/gepa_distill/runs/untrained_val
+    teacher_test: kaushik/elicit/gepa_distill/runs/teacher_test

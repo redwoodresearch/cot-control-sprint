@@ -88,6 +88,13 @@ def run_job(exp: str, job: str, args: list[str]) -> None:
             deep_set(cfg, k, v)
     else:
         cfg = resolve(exp, overrides=overrides)
+    sub = (cfg.get("modal") or {}).get("sub")
+    if sub:   # the config names its deployed sub app pair; must precede any cotcontrol Modal import
+        from kaushik.core.modal_apps import setup_env
+
+        if "cotcontrol.inference.modal_vllm" in sys.modules or "cotcontrol.training.modal_app" in sys.modules:
+            raise RuntimeError("modal.sub set but cotcontrol's Modal modules are already imported")
+        setup_env(sub=sub)
     if job in JOBS:
         JOBS[job][1](cfg, job_argv)
         return

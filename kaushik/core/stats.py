@@ -8,6 +8,7 @@ random-number consumption (re-running an analysis must reproduce its tables):
   share the question resample between arms (paired on tasks, independent seeds).
 * `boot_1d` / `boot_seeds_questions` / `boot_paired_seeds`: the plain-array
   variants used by orange_expand/baseline (per-question flags, seeds x questions).
+* `boot_interleaved`: per-draw question-then-seeds order (kaushik/orange/rl).
 
 Also: `add_long` (compl_long = compliance among traces at least as long as the
 untrained median), `hit` helpers, `pct` / `pct_ci` / `md_table` / `write_csv`.
@@ -119,6 +120,21 @@ def boot_paired_seeds(Ma: np.ndarray, Mb: np.ndarray, rng: np.random.Generator, 
     sa = rng.integers(0, Ma.shape[0], size=(B, Ma.shape[0]))
     sb = rng.integers(0, Mb.shape[0], size=(B, Mb.shape[0]))
     return np.array([Ma[np.ix_(sa[i], qi[i])].mean() - Mb[np.ix_(sb[i], qi[i])].mean() for i in range(B)])
+
+
+def boot_interleaved(MA: np.ndarray, MB: np.ndarray | None = None, rng: np.random.Generator | None = None,
+                     B: int = 2000) -> np.ndarray:
+    """B bootstrap means of MA (or MA - MB), resampling per draw: shared question
+    columns, then MA's seeds, then MB's seeds (kaushik/orange/rl/analyze.py order)."""
+    SA, Q = MA.shape
+    out = np.empty(B)
+    for i in range(B):
+        q = rng.integers(0, Q, Q)
+        a = MA[rng.integers(0, SA, SA)][:, q].mean()
+        if MB is not None:
+            a -= MB[rng.integers(0, MB.shape[0], MB.shape[0])][:, q].mean()
+        out[i] = a
+    return out
 
 
 # ----------------------------------------------------------------------------- derived columns

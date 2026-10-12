@@ -1,0 +1,25 @@
+# Workstream C1: dose / stacking / reasoning effort of B2's GEPA LoRA (README.md). Eval only: the shared
+# protocol, candidate-eval job and analysis definitions come from ../config.yaml (kaushik/elicit/common/);
+# this file names the Modal sub-apps, the scaled adapters and the probe. Sweeps: sweeps/*.yaml.
+extends: ../config.yaml
+modal:
+  sub: gepa-dose
+dose:                        # scaled adapters: B2's checkpoint-400 with lora_alpha 32 -> 32*dose (same safetensors),
+  vol_dir: /checkpoints/gepa_dose                                        # uploaded by hand to <vol_dir>/s{seed}_x{dose}
+  b2_adapter: "/checkpoints/gepa_lora/gl_r16_lr1e-4_s{seed}/checkpoint-400"   # dose x1 = B2's original path
+  doses: [0.5, 0.75, 1.05, 1.1, 1.15, 1.2, 1.3, 1.5, 2, 3]
+probe:                       # probe.py: teacher-forced logp of the GEPA-prompted model's first tokens vs dose
+  n: 8
+  max_tokens: 24
+  doses: [0, 0.5, 1, 1.5, 2, 3]
+  seed: 0                    # adapter seed
+analysis:
+  style: dose                # heldout chars / baseline chars columns; untrained rows passed explicitly
+  refs:                      # reference evals symlinked into runs/ (B's teacher / untrained, B2's LoRA x1)
+    teacher_val: kaushik/elicit/gepa_distill/runs/teacher_val
+    untrained_val: kaushik/elicit/gepa_distill/runs/untrained_val
+    teacher_test: kaushik/elicit/gepa_distill/runs/teacher_test
+    x1_val: kaushik/elicit/gepa_lora/runs/lr1e-4_c400_val
+    x1_test_s0: kaushik/elicit/gepa_lora/runs/lr1e-4_c400_test_s0
+    x1_test_s1: kaushik/elicit/gepa_lora/runs/lr1e-4_c400_test_s1
+    x1_test_s2: kaushik/elicit/gepa_lora/runs/lr1e-4_c400_test_s2

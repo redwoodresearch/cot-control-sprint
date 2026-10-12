@@ -1,39 +1,54 @@
 """Does vLLM honour the scaled lora_alpha? Teacher-forced log-prob of the TEACHER's first reasoning tokens under
-base, x0.5, x1, x1.5, x2, x3 (seed-0 adapter), on n held-out TRAIN prompts (B2's data/prompts.jsonl, holdout rows).
-If the dose is applied, logp(teacher tokens) should move monotonically with dose (x0.5 between base and x1; x2/x3
-beyond x1, possibly overshooting). Writes runs/_probe/dose.json.
+base and the `probe.doses` adapters (`probe.seed`), on `probe.n` held-out TRAIN prompts (B2's prompts.jsonl,
+holdout rows). If the dose is applied, logp(teacher tokens) should move monotonically with dose (x0.5 between
+base and x1; x2/x3 beyond x1, possibly overshooting). Writes runs/_probe/dose.json.
 
-    kaushik/run.py elicit/gepa_dose probe [--n 8] [--max-tokens 24]
+    run.py elicit/gepa_dose probe [probe.n=8] [probe.max_tokens=24]
 """
 
 from __future__ import annotations
 
-import argparse
 import asyncio
-import sys
+from dataclasses import replace
 
-from dose_common import (BASE_MODEL, DOSES, GEN_KWARGS, GL, ROOT, RUNS, adapter_path, atomic_write_json, check_apps,
-                         gepa_prompt, read_jsonl)
+from kaushik.core.io import ROOT, atomic_write_json, read_jsonl
+from kaushik.elicit.common import (
+    blocks_of,
+    check_modal,
+    gen_config_of,
+    runs_dir,
+    setup_modal,
+)
+from kaushik.elicit.common.distill import teacher_prompt
 
-sys.path.insert(0, str(ROOT))
-from cotcontrol.inference.modal_vllm import ModalGenerateConfig, generate_async, score_async  # noqa: E402
+
+def adapter_path(cfg: dict, seed: int, dose: float) -> str:
+    """<dose.vol_dir>/s<seed>_x<dose>; dose x1 is B2's original adapter."""
+    d = cfg["dose"]
+    return d["b2_adapter"].format(seed=seed) if dose == 1 else f"{d['vol_dir']}/s{seed}_x{dose:g}"
 
 
-async def run(n: int, max_tokens: int) -> dict:
-    rows = [r for r in read_jsonl(GL / "data" / "prompts.jsonl") if r["holdout"]]
+async def run(cfg: dict) -> dict:
+    from cotcontrol.inference.modal_vllm import generate_async, score_async
+
+    p = cfg["probe"]
+    base_model = cfg["base_model"]
+    n = int(p["n"])
+    rows = [r for r in read_jsonl(ROOT / cfg["distill"]["data"]["prompts"]) if r["holdout"]]
     rows = rows[:: max(1, len(rows) // n)][:n]
     msgs_s = [[{"role": "user", "content": r["user"]}] for r in rows]
-    msgs_t = [[{"role": "system", "content": gepa_prompt()}] + m for m in msgs_s]
-    gen = ModalGenerateConfig(**{**GEN_KWARGS, "temperature": 0.0, "max_tokens": max_tokens, "cache": False,
-                                 "return_logprobs": True})
-    base, teacher = await asyncio.gather(generate_async(msgs_s, BASE_MODEL, gen, None),
-                                         generate_async(msgs_t, BASE_MODEL, gen, None))
+    msgs_t = [[{"role": "system", "content": teacher_prompt(cfg)}] + m for m in msgs_s]
+    gen = replace(gen_config_of(cfg, blocks_of(cfg, ["modes"])["modes"]), temperature=0.0,
+                  max_tokens=int(p["max_tokens"]), cache=False, return_logprobs=True)
+    base, teacher = await asyncio.gather(generate_async(msgs_s, base_model, gen, None),
+                                         generate_async(msgs_t, base_model, gen, None))
     seqs = [list(b["prompt_token_ids"]) + list(t["token_ids"][0]) for b, t in zip(base, teacher)]
     plens = [len(b["prompt_token_ids"]) for b in base]
-    doses = [0, 0.5, 1, *[d for d in DOSES if d > 1]]
-    paths = [None if d == 0 else adapter_path(0, d) for d in doses]
-    lps = await asyncio.gather(*[score_async(seqs, plens, BASE_MODEL, gen, p) for p in paths])
-    out = {"n": len(rows), "doses": doses, "paths": paths, "teacher_first_tokens": [t["metadata"][0]["raw_response"] for t in teacher],
+    doses = list(p["doses"])
+    paths = [None if d == 0 else adapter_path(cfg, int(p["seed"]), d) for d in doses]
+    lps = await asyncio.gather(*[score_async(seqs, plens, base_model, gen, path) for path in paths])
+    out = {"n": len(rows), "doses": doses, "paths": paths,
+           "teacher_first_tokens": [t["metadata"][0]["raw_response"] for t in teacher],
            "logp_teacher_tokens": {str(d): [sum(x) for x in lp] for d, lp in zip(doses, lps)},
            "first_tok_logp": {str(d): [x[0] for x in lp] for d, lp in zip(doses, lps)}}
     out["mean_logp"] = {d: sum(v) / len(v) for d, v in out["logp_teacher_tokens"].items()}
@@ -41,18 +56,11 @@ async def run(n: int, max_tokens: int) -> dict:
     return out
 
 
-def main(argv=None) -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=8)
-    ap.add_argument("--max-tokens", type=int, default=24)
-    args = ap.parse_args(argv)
-    check_apps()
-    out = asyncio.run(run(args.n, args.max_tokens))
-    atomic_write_json(out, RUNS / "_probe" / "dose.json")
+def main(cfg: dict, argv: list[str]) -> None:
+    setup_modal(cfg)
+    check_modal(cfg)
+    out = asyncio.run(run(cfg))
+    atomic_write_json(out, runs_dir(cfg) / "_probe" / "dose.json", indent=1)
     print("dose -> mean logp(teacher first tokens) | mean first-token logp")
     for d in out["doses"]:
         print(f"  x{d:<4g} {out['mean_logp'][str(d)]:8.2f} | {out['mean_first_tok_logp'][str(d)]:7.3f}")
-
-
-if __name__ == "__main__":
-    main()

@@ -14,11 +14,15 @@ Layers, each overriding the previous one (lower wins only where higher is silent
   targets, the per-block `eval` patch, `train` facts (e.g. attn_implementation)
   and the `train` patches named by `profiles: [reasoning_off, sft]`. These fill
   gaps only; anything the experiment / sweep / CLI set explicitly wins.
-* `eval.grid` expands to named blocks: `{conditions, modes, prompts, name}` with
-  `prompts` a callable reference `path.py:fn(condition, mode, base_model) ->
-  {system_prompt, state_requirement}`. Each block = defaults.eval.block <
-  model.eval < `eval.block` < the grid's own keys (`system_prompt`,
-  `state_requirement`, `mode`).
+* `eval.grid` (or several under `eval.grids: {key: grid}`) expands to named
+  blocks: `{conditions, modes, prompts, name, block}` with `prompts` a callable
+  reference `path.py:fn(condition, mode, base_model) -> {system_prompt,
+  state_requirement}`. Each block = defaults.eval.block < model.eval <
+  `eval.block` < the grid's own `block` patch < the grid's keys (`system_prompt`,
+  `state_requirement`, `mode`). Named blocks written out by hand get the same
+  base (defaults.eval.block < model.eval < `eval.block` < the block itself).
+* `modal: {sub: <name>}` selects a deployed sub app pair (`run.py` calls
+  `modal_apps.setup_env(sub=...)` before dispatching the job).
 * string values whose `{fields}` are all sweep labels (plus `run_name`, `model`,
   `experiment`) are formatted, e.g. `data_path: data/sft_{variant}.jsonl`.
 
@@ -43,8 +47,8 @@ DEFAULTS_PATH = KAUSHIK / "config" / "defaults.yaml"
 # Other sections (meta, task, inference, ...) pass through: Sebastian's loaders ignore
 # unknown sections, and experiment jobs read them.
 CORE_KEYS = ("experiment", "model", "profiles", "job", "eval_steps", "extends", "hooks", "registry",
-             "checkpoints", "analysis", "data")
-EVAL_META_KEYS = ("grid", "block")
+             "checkpoints", "analysis", "data", "modal", "eval_sections")
+EVAL_META_KEYS = ("grid", "grids", "block")
 
 
 # ----------------------------------------------------------------------------- tree helpers
@@ -196,6 +200,24 @@ def expand_grid(grid: dict, block: dict, base_model: str) -> dict:
     return blocks
 
 
+def eval_sections(cfg: dict) -> list[str]:
+    return list(cfg.get("eval_sections") or ["eval"])
+
+
+def expand_eval_section(ev: dict, spec: dict | None, base_model: str) -> dict:
+    """One eval section -> {block_name: fully specified block}: base = defaults.eval.block
+    < model.eval < `block`; named blocks = base < own keys (a `null` entry drops an
+    inherited block); grids expand with their own `block` patch on top of base."""
+    base = deep_merge(defaults()["eval"]["block"], spec.get("eval", {}) if spec else {})
+    base = deep_merge(base, ev.get("block") or {})
+    named = {k: deep_merge(base, v) for k, v in ev.items() if k not in EVAL_META_KEYS and isinstance(v, dict)}
+    grids = ({"_": ev["grid"]} if "grid" in ev else {}) | dict(ev.get("grids") or {})
+    for g in grids.values():   # per-grid `block:` patch applies to that grid only
+        named = {**expand_grid(g, deep_merge(base, g.get("block") or {}), base_model), **named}
+    dropped = {k for k, v in ev.items() if k not in EVAL_META_KEYS and v is None}
+    return {k: v for k, v in named.items() if k not in dropped}
+
+
 def materialize(cfg: dict, labels: dict | None = None) -> dict:
     """Apply the model entry, expand the eval grid and format strings (see module doc)."""
     cfg = copy.deepcopy(cfg)
@@ -203,16 +225,14 @@ def materialize(cfg: dict, labels: dict | None = None) -> dict:
     if spec is not None:
         cfg = deep_merge(_model_base(spec, list(cfg.get("profiles") or [])), cfg)
     cfg["analysis"] = deep_merge(defaults()["analysis"], cfg.get("analysis") or {})
-    ev = cfg.get("eval")
     # Blocks are expanded only once the model is known; a config resolved without one
-    # (analysis jobs) keeps `eval.grid` / `eval.block` as data for the job to read.
-    if isinstance(ev, dict) and ("grid" in ev or "block" in ev) and cfg.get("base_model"):
-        block = deep_merge(defaults()["eval"]["block"], spec.get("eval", {}) if spec else {})
-        block = deep_merge(block, ev.get("block") or {})
-        named = {k: v for k, v in ev.items() if k not in EVAL_META_KEYS}
-        if "grid" in ev:
-            named = {**expand_grid(ev["grid"], block, cfg["base_model"]), **named}
-        cfg["eval"] = named
+    # (analysis jobs) keeps `eval.grid(s)` / `eval.block` as data for the job to read.
+    # `eval_sections` (default [eval]) lists every section expanded this way, e.g. a
+    # `final_eval` section of test-split blocks read by the experiment's own eval code.
+    for section in eval_sections(cfg):
+        ev = cfg.get(section)
+        if isinstance(ev, dict) and any(k in ev for k in EVAL_META_KEYS) and cfg.get("base_model"):
+            cfg[section] = expand_eval_section(ev, spec, cfg["base_model"])
     fields = {**(labels or {}), "model": cfg.get("model"), "run_name": cfg.get("run_name"),
               "experiment": cfg.get("experiment")}
     return _format_strings(cfg, {k: v for k, v in fields.items() if v is not None})
@@ -232,8 +252,9 @@ def resolve(exp: str, point: dict | None = None, overrides: dict | None = None,
 def train_eval_config(cfg: dict) -> dict:
     """The resolved tree minus core-only keys: what scripts/train_eval.py / RLConfig read."""
     out = {k: v for k, v in cfg.items() if k not in CORE_KEYS}
-    if isinstance(out.get("eval"), dict):
-        out["eval"] = {k: v for k, v in out["eval"].items() if k not in EVAL_META_KEYS}
+    for section in eval_sections(cfg):
+        if isinstance(out.get(section), dict):
+            out[section] = {k: v for k, v in out[section].items() if k not in EVAL_META_KEYS and v is not None}
     return out
 
 

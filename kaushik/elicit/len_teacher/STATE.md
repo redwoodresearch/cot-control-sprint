@@ -50,3 +50,10 @@ every intervention with rollouts on disk (val 200 q; 40-q sweeps; test 500 q; ca
 - Modal billing report shows $0 for sub-len-teacher (lags > 1 h). Estimate: 45 chunk calls (5 variants x 9 chunks) of
   ~7-10 min H200 each incl. load, high-effort ones longer -> ~7-8 GPU-h ~ $35. OpenRouter judge: ~5 x 1784 ignore_question-only
   judge calls, negligible. Re-run `kaushik/run.py elicit/len_teacher spend` later to confirm.
+
+## Migrated to kaushik/core + kaushik/elicit/common (2026-10-12)
+Config: `config.yaml` (extends `../config.yaml`; variants + curves arm table), sweeps `sweeps/{val,screen,distill}.yaml`;
+jobs `evalrun / analyze / distill / noise / deploy` are shims onto `kaushik/elicit/common`, `curves.py` reads `curves:`.
+Checks: config equivalence PASS (10/10 manifests, distill never launched); `results/val_table.{md,json}` and
+`results/curves.{md,json,png}` byte-identical on re-run. Deleted `cli.py`, `lt_common.py`, `evalrun.py`/`distill_app.py`
+copies. Commands: README.md. Nothing running; no launches.

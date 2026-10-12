@@ -2,8 +2,11 @@
 
 Owner agent: C1 (coordinator notes: kaushik/elicit/COORDINATOR.md). Budget $120 (raised 15:18 PT; was $90); stop new launches at $100. Eval only.
 Apps: `cot-control-sprint_kaushik-reddy_sub-gepa-dose_{inference,train}` (deployed 15:07 PT, 120 s idle window).
-Every command: `ELICIT_SUB=sub-gepa-dose .venv/bin/python kaushik/run.py elicit/gepa_dose <probe|eval|launch|analyze|spend>`
-(cli.py sets the app env itself; `launch` runs detached eval processes, pid in runs/<run>/pid, log runs/<run>/eval.log).
+Commands (migrated 2026-10-12 to `kaushik/core` + `kaushik/elicit/common`; README "Layout and commands"):
+`.venv/bin/python kaushik/run.py sweep elicit/gepa_dose/sweeps/<name>.yaml [--dry-run]`, `... elicit/gepa_dose <probe|evalrun|analyze>`;
+`config.yaml` sets the Modal sub-app (`modal.sub: gepa-dose`). The old `cli.py` / `dose_common.py` / evalrun copy were deleted after
+the config-equivalence (34/34 manifests) and analysis-equivalence checks (3 of 4 tables byte-identical; sweep_effort's one
+differing row explained in the README).
 
 ## Setup
 - Scaled adapters: B2's `/checkpoints/gepa_lora/gl_r16_lr1e-4_s{0,1,2}/checkpoint-400` copied to

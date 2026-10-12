@@ -1,0 +1,23 @@
+# Seed-0 screen 1 (sweep.sh): the 6 combos of combos.yaml plus the brevity / verbosity adapters alone and the
+# GEPA x1 reference, on the val subset (modes block, 40 questions, subsample seed 1; chunk 360 = one engine call).
+#   run.py sweep elicit/lora_arith/sweeps/screen.yaml --dry-run
+experiment: elicit/lora_arith
+job: evalrun
+run_name: "{name}_sub"
+axes:
+  - - {_label: {name: ref_gepa}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400}
+    - {_label: {name: brief_s0}, candidate.lora: /checkpoints/lora_arith/brief_s0/checkpoint-400}
+    - {_label: {name: verbose_s0}, candidate.lora: /checkpoints/lora_arith/verbose_s0/checkpoint-400}
+    - {_label: {name: gepa_m0.5b_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_m0.5b_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_m0.5b_s0.json]}
+    - {_label: {name: gepa_m1.0b_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_m1.0b_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_m1.0b_s0.json]}
+    - {_label: {name: gepa_m1.5b_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_m1.5b_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_m1.5b_s0.json]}
+    - {_label: {name: gepa_p0.5v_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_p0.5v_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_p0.5v_s0.json]}
+    - {_label: {name: gepa_p1.0v_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_p1.0v_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_p1.0v_s0.json]}
+    - {_label: {name: gepa_m1.0b_p1.0v_s0}, candidate.lora: /checkpoints/lora_arith/combos/gepa_m1.0b_p1.0v_s0, candidate.requires: [kaushik/elicit/lora_arith/runs/_combos/gepa_m1.0b_p1.0v_s0.json]}
+overrides:
+  eval.block.split: val
+  eval.block.max_samples: 40
+  eval.block.subsample_seed: 1
+  candidate.blocks: [modes]
+  candidate.chunk: 360
+max_gpus: 24

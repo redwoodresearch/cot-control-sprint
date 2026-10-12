@@ -73,3 +73,15 @@ def test_formatting():
     assert st.md_table(["a", "b"], [[1, "x"]]) == "| a | b |\n|---|---|\n| 1 | x |"
     assert st.passes_hit({"honest": 0.03, "honest_lo": 0.01}, "honest", 0.02)
     assert not st.passes_hit({"honest": 0.03, "honest_lo": 0.0}, "honest", 0.02)
+
+
+def test_boot_interleaved_order():
+    MA = np.array([[1, 0, 1, 1], [0, 1, 1, 1]], float)
+    MB = np.array([[0, 0, 1, 0]], float)
+    a = st.boot_interleaved(MA, MB, np.random.default_rng(3), 50)
+    b = st.boot_interleaved(MA, MB, np.random.default_rng(3), 50)
+    assert a.shape == (50,) and np.array_equal(a, b) and -1 <= a.min() and a.max() <= 1
+    # same draw order as the loop in kaushik/orange/rl/analyze.py
+    rng = np.random.default_rng(3)
+    q = rng.integers(0, 4, 4); sa = rng.integers(0, 2, 2); sb = rng.integers(0, 1, 1)
+    assert a[0] == MA[sa][:, q].mean() - MB[sb][:, q].mean()

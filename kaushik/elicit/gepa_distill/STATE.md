@@ -1,5 +1,10 @@
 # gepa_distill STATE (Workstream B: steer gpt-oss-20b toward the GEPA-prompted teacher) — updated 2026-10-09 15:05 PT — DONE
 
+Migrated 2026-10-12 to `kaushik/core` + `kaushik/elicit/common` (README "Layout and commands"): config.yaml +
+sweeps/{refs,steer_sweep,steer_final}.yaml reproduce every run manifest; results tables re-run byte-identical
+(sweep.md at `--boot 300`, the others at 1000); cli.py / gd_common.py / evalrun.py deleted. Nothing running.
+The `steer` stage below is now `run.py elicit/gepa_distill steer extract|build|cleanup`; `launch`/`eval` are sweeps.
+
 Owner agent: Workstream B. Spec: `kaushik/elicit/PLAN.md` + coordinator messages (14:00 PT: LoRA step dropped, now owned
 by `kaushik/elicit/gepa_lora/`; our cap is **$230**; teacher check on val+test together; steering sweep up to 32 GPUs).
 

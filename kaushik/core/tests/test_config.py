@@ -85,3 +85,43 @@ def test_unknown_model_and_profile(scratch_experiment):
 def test_format_strings_leaves_unknown_fields():
     out = c._format_strings({"a": "{known}-{unknown}", "b": "{known}", "c": ["{known}"], "d": "literal {"}, {"known": "k"})
     assert out == {"a": "{known}-{unknown}", "b": "k", "c": ["k"], "d": "literal {"}
+
+
+def test_named_blocks_get_base_and_grids(scratch_experiment):
+    point = {"model": "qwen8b", "eval.b1": {"mode": "all", "split": "test"},
+             "eval.grids": {"final": {"conditions": ["persona"], "modes": ["lowercase_thinking"],
+                                      "prompts": str(scratch_experiment / "demo" / "prompts.py") + ":eval_block",
+                                      "name": "final_{condition}_{mode}",
+                                      "block": {"split": "test", "eval_at_steps": [0, 50], "chunk": 250}}}}
+    cfg = c.resolve("demo/sft", point, labels={"variant": "a", "model": "qwen8b", "seed": 0}, run_name="r")
+    b1 = cfg["eval"]["b1"]
+    assert b1["mode"] == "all" and b1["split"] == "test"                      # the block's own keys win
+    assert b1["temperature"] == 1.0 and b1["chat_template_kwargs"] == {"enable_thinking": True}   # defaults + model
+    assert b1["parallel_checkpoints"] == 3                                     # eval.block
+    fin = cfg["eval"]["final_persona_lowercase_thinking"]
+    assert fin["split"] == "test" and fin["eval_at_steps"] == [0, 50] and fin["chunk"] == 250   # grid patch
+    assert fin["system_prompt"].startswith("persona:") and fin["parallel_checkpoints"] == 3
+    val = cfg["eval"]["persona_lowercase_thinking"]                            # the shared eval.grid is untouched
+    assert val["split"] == "val" and val["eval_at_steps"] == [100]
+    assert set(cfg["eval"]) == {"b1", "persona_lowercase_thinking", "standard_lowercase_thinking",
+                                "final_persona_lowercase_thinking"}
+    assert "modal" in c.CORE_KEYS
+
+
+def test_eval_sections_and_null_blocks(scratch_experiment):
+    point = {"model": "qwen8b", "eval_sections": ["eval", "final_eval"],
+             "eval.standard_lowercase_thinking": None,            # drop a grid-expanded block
+             "final_eval": {"block": {"split": "test", "eval_at_steps": [50]},
+                            "final_standard": {"mode": "all", "chunk": 750},
+                            "grid": {"conditions": ["persona"], "modes": ["lowercase_thinking"],
+                                     "prompts": str(scratch_experiment / "demo" / "prompts.py") + ":eval_block",
+                                     "name": "final_{condition}_{mode}"}}}
+    cfg = c.resolve("demo/sft", point, labels={"variant": "a", "model": "qwen8b", "seed": 0}, run_name="r")
+    assert set(cfg["eval"]) == {"persona_lowercase_thinking"}
+    fe = cfg["final_eval"]
+    assert set(fe) == {"final_standard", "final_persona_lowercase_thinking"}
+    assert fe["final_standard"]["split"] == "test" and fe["final_standard"]["temperature"] == 1.0
+    assert fe["final_persona_lowercase_thinking"]["eval_at_steps"] == [50]
+    assert fe["final_persona_lowercase_thinking"]["chat_template_kwargs"] == {"enable_thinking": True}
+    view = c.train_eval_config(cfg)
+    assert "eval_sections" not in view and "grid" not in view["final_eval"] and "block" not in view["final_eval"]

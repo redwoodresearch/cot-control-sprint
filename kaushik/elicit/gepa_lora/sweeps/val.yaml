@@ -1,0 +1,11 @@
+# Full val (200 q x 9 modes + held-out + unconstrained) of the three seed-0 checkpoint-400 adapters.
+experiment: elicit/gepa_lora
+job: evalrun
+run_name: "{cand}_c400_val"
+axes:
+  - - {_label: {cand: lr1e-4}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400}
+    - {_label: {cand: lr3e-4}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr3e-4_s0/checkpoint-400}
+    - {_label: {cand: anchor}, candidate.lora: /checkpoints/gepa_lora/gl_r16_lr1e-4_anchor_s0/checkpoint-400}
+overrides:
+  eval.block.split: val
+max_gpus: 24

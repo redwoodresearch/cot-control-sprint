@@ -1,0 +1,24 @@
+# Eval-only run of the existing 1A adapter (fragility seed 0, step 50) and its checkpoint-0 (= untrained)
+# under the new val protocol; the run dir holds a train_result.json restricted to those checkpoints.
+#   run.py sweep elicit/nocot_sft/sweeps/ref1a.yaml --check "kaushik/elicit/nocot_sft/runs/ref1a-*/config.yaml"
+experiment: elicit/nocot_sft
+job: eval
+run_name: "ref1a-{arm}-gptoss20b-seed{seed}"
+seeds: [0]
+axes:
+  - - _label: {arm: mcq_noreason}
+      arm: ref_1a
+      source_run: kaushik/fragility/runs/fragility-mcq_noreason-gptoss20b-seed0
+      train.data_path: kaushik/fragility/data/mcq_noreason.jsonl
+      train.save_at_steps: [10, 20, 30, 40, 50]
+      eval_steps: [0, 50]
+      eval.val_modes.eval_at_steps: &v [0, 50]
+      eval.val_heldout.eval_at_steps: *v
+      eval.val_baseline.eval_at_steps: *v
+      eval.final_modes.run: false          # 1A's test numbers exist in fragility/; val only here
+      eval.final_heldout.run: false
+      eval.final_baseline.run: false
+      eval.final_modes.eval_at_steps: *v
+      eval.final_heldout.eval_at_steps: *v
+      eval.final_baseline.eval_at_steps: *v
+max_gpus: 6

@@ -1,0 +1,18 @@
+# 24-variant steering screen (STATE.md): GEPA `last` vectors and GEPA-minus-brevity residuals (`resid`) at
+# layers 6/9/12/15 x alpha 1/2/4, 40 val questions x 9 training modes, served as steered base checkpoints
+# built by `run.py elicit/gepa_distill steer build` (runs/steer/ckpts.json). Results: results/sweep.md.
+experiment: elicit/gepa_distill
+job: evalrun
+run_name: "sw_{kind}_L{layer}_a{alpha}"
+axes:
+  - [{_label: {kind: last}}, {_label: {kind: resid}}]
+  - [{_label: {layer: 6}}, {_label: {layer: 9}}, {_label: {layer: 12}}, {_label: {layer: 15}}]
+  - [{_label: {alpha: 1}}, {_label: {alpha: 2}}, {_label: {alpha: 4}}]
+overrides:
+  candidate.base_model: "/checkpoints/gepa_distill/steer/ckpt/{kind}_L{layer}_a{alpha}"
+  candidate.blocks: [modes]
+  candidate.chunk: 400
+  eval.block.split: val
+  eval.block.max_samples: 40
+  eval.block.subsample_seed: 1
+max_gpus: 32

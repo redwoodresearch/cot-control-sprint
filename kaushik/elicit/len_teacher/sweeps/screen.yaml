@@ -1,0 +1,15 @@
+# Round-2 40-question screen (modes block only, the C1 subset: 40 q, subsample_seed 1).
+experiment: elicit/len_teacher
+job: evalrun
+run_name: "{variant}_sw"
+axes:
+  - - {_label: {variant: recheck}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/recheck.txt}
+    - {_label: {variant: recheck_len}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/recheck_len.txt}
+    - {_label: {variant: sustain}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/sustain.txt}
+overrides:
+  eval.block.split: val
+  eval.block.chat_template_kwargs: {reasoning_effort: medium}
+  eval.block.max_samples: 40
+  eval.block.subsample_seed: 1
+  candidate.blocks: [modes]
+max_gpus: 24

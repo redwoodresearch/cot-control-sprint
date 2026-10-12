@@ -1,0 +1,13 @@
+# Selected steering variants on full val + test, the random-direction control (same layer / norm as
+# last_L15_a2, seed 0) and the GEPA-minus-brevity residual on test. Results: results/table.md.
+experiment: elicit/gepa_distill
+job: evalrun
+run_name: "st_{variant}_{split}"
+axes:
+  - - {_label: {variant: last_L12_a1, split: val}, eval.block.split: val, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/last_L12_a1}
+    - {_label: {variant: last_L12_a1, split: test}, eval.block.split: test, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/last_L12_a1}
+    - {_label: {variant: last_L15_a2, split: val}, eval.block.split: val, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/last_L15_a2}
+    - {_label: {variant: last_L15_a2, split: test}, eval.block.split: test, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/last_L15_a2}
+    - {_label: {variant: random_L15_a2, split: test}, eval.block.split: test, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/random_L15_a2_s0}
+    - {_label: {variant: resid_L12_a2, split: test}, eval.block.split: test, candidate.base_model: /checkpoints/gepa_distill/steer/ckpt/resid_L12_a2}
+max_gpus: 24

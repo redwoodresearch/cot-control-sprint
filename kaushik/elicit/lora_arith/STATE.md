@@ -1,8 +1,9 @@
 # Workstream C3 — LoRA arithmetic: GEPA LoRA minus brevity (gpt-oss-20b) — STATE
 
 Owner agent: C3. Budget $100 (stop new launches at $80). Protocol: `kaushik/elicit/PLAN.md`. Method notes: `README.md`.
-Env for every command: `export ELICIT_SUB=sub-lora-arith`, then `.venv/bin/python kaushik/run.py elicit/lora_arith <stage>`
-(gl_common.set_apps() exports the COTCONTROL_MODAL_* app names; `launch` does it for detached evals).
+Migrated to `kaushik/core` + `kaushik/elicit/common` on 2026-10-12 (README "Layout and commands"): `config.yaml`
+(`modal.sub: lora-arith` sets the apps) + `sweeps/*.yaml` replace cli.py / gl_common.py / sweep*.sh; config and
+analysis equivalence verified (all manifests OK, results byte-identical). The stage commands below are historical.
 Apps (deployed 2026-10-09 ~16:10 PT): `cot-control-sprint_kaushik-reddy_sub-lora-arith_{inference,train,distill,arith,random-lora}`.
 
 ## Method

@@ -1,0 +1,11 @@
+# Test evals of the three noise adapters (pooled by analyze as noise_pooled_lr1e-4_c400_test_s{k} symlinks).
+experiment: elicit/gepa_lora
+job: evalrun
+run_name: "noise_lr1e-4_c400_test_n{k}"
+axes:
+  - [{_label: {k: 0}}, {_label: {k: 1}}, {_label: {k: 2}}]
+overrides:
+  eval.block.split: test
+  candidate.lora: "/checkpoints/gepa_lora/noise/gl_r16_lr1e-4_c400/noise{k}"
+  candidate.requires: ["kaushik/elicit/gepa_lora/runs/_noise/gl_r16_lr1e-4_c400/noise_adapters.json"]
+max_gpus: 24

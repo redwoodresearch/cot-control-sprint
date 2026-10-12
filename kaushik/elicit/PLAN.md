@@ -17,6 +17,10 @@ steering that never supervises reasoning tokens. Two parallel workstreams, one o
 | reserve | coordinator | — | ~$0 (A/B/B2 finished well under cap: est. ~$330 total) |
 
 - Spend: `.venv/bin/python kaushik/elicit/spend.py <sub>` (Modal billing lags up to ~1 h: keep 20% headroom).
+- Code layout (refactor phase B, 2026-10-12): every workstream is a `config.yaml` (`extends: kaushik/elicit/config.yaml`,
+  the shared protocol) plus `sweeps/*.yaml`, run through `kaushik/run.py <exp> <job>` / `run.py sweep <sweep>`; the shared
+  implementation (candidate eval, distillation trainer, noise control, analysis) lives in `kaushik/elicit/common/`
+  (README there). `nocot_sft` uses the core train/eval jobs. Writeup inputs (`results/*`) are unchanged.
   OpenRouter (LLM judge) is small; estimate it from call counts. Stop new launches at 80% of the cap and report.
 - New deployments use a 120 s idle window (`COTCONTROL_SCALEDOWN_WINDOW`), not 600 s.
 - Use at most 24 GPUs at once per workstream; no new launches above 800 workspace containers.

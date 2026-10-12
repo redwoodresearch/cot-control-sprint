@@ -331,16 +331,78 @@ def write_eval_summary(run_dir: Path, blocks: list[tuple[str, dict]], base_model
     print(f"[summary] wrote {rel(run_dir / 'eval_summary.json')}")
 
 
-def eval_jobs(cfg: dict, steps=None, only: list[str] | None = None) -> list[Job]:
-    """One job per (eval block, checkpoint); jobs whose checkpoints are unknown yet
-    (training in progress) are returned with ready() False."""
+def eval_block_job(name: str, blk: dict, base_model: str, tc, lora: str | None, out: Path,
+                   backend_extra: dict | None = None, priority: tuple = (), group: str | None = None,
+                   progress: Path | None = None) -> Job:
+    """One scheduler job: eval block `blk` (fully defaulted, as train_eval.eval_blocks
+    returns it) for one adapter (`lora` = volume path, None = base model), written to
+    `out` (its stem names the result: checkpoint-50, base, noise3, ...). `tc` is a
+    TrainConfig or a zero-arg callable returning one (resolved at run time).
+    `backend_extra` is merged into the result's backend_info; a progress line is
+    appended to `progress` (eval_progress.jsonl) when given."""
     from cotcontrol.eval.eval import eval_cotcontrolqa
     from cotcontrol.inference.modal_vllm import make_generate_fn
 
     t = te()
+    stem = out.stem
+    step = "base" if stem == "base" else (int(stem[len("checkpoint-"):]) if stem.startswith("checkpoint-")
+                                          and stem[len("checkpoint-"):].isdigit() else stem)
+
+    async def run():
+        train_cfg = tc() if callable(tc) else tc
+        gen_cfg = t.build_generate_config(train_cfg, blk)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        t0 = time.time()
+        chunk = int(blk.get("chunk") or 0)
+        inner = make_generate_fn(base_model, gen_cfg, lora)
+
+        async def gen(messages_list):
+            if not chunk:
+                return await inner(messages_list)
+            parts = [messages_list[i:i + chunk] for i in range(0, len(messages_list), chunk)]
+            outs = await asyncio.gather(*[inner(p) for p in parts])
+            return [r for o in outs for r in o]
+
+        result = await eval_cotcontrolqa(
+            model=base_model, system_prompt=t.resolve_system_prompt(blk["system_prompt"]), generate_fn=gen,
+            save_dir=out.parent, save_name=out.stem, dataset=blk["dataset"], mode=blk["mode"],
+            allowed_modes=blk["allowed_modes"], seed=int(blk["seed"]),
+            state_requirement=bool(blk["state_requirement"]), max_samples=blk["max_samples"],
+            subsample_seed=blk["subsample_seed"], split=blk["split"],
+            grade_meta_discussion=blk["grade_meta_discussion"],
+            meta_discussion_scope=blk.get("meta_discussion_scope", "compliant"),
+            judge_model=blk["judge_model"], judge_concurrency=int(blk["judge_concurrency"]),
+            backend_info={"base_model": base_model, "lora_path": lora, "generate_config": dataclasses.asdict(gen_cfg),
+                          **(backend_extra or {})},
+        )
+        from kaushik.core.results import honest_rate
+
+        s = result["summary"]
+        if progress is not None:
+            append_jsonl(progress, {
+                "block": name, "step": step, "lora_path": lora, "accuracy": s["accuracy"],
+                "compliance_rate": s["compliance_rate"], "honest_rate": honest_rate(result),
+                "meta_discussion_rate": s["meta_discussion_rate"], "n_errors": s["n_errors"],
+                "n_rollouts": s["n_rollouts"], "per_mode": s["per_mode"], "seconds": round(time.time() - t0),
+                "time": datetime.now().isoformat()})
+        print(f"[done] {out.parents[2].name} {name} {stem}: compliance={s['compliance_rate']} "
+              f"accuracy={s['accuracy']} errors={s['n_errors']}", flush=True)
+
+    return Job(name=f"eval:{out.parents[2].name}/{name}/{stem}", weight=block_weight(blk), run=run,
+               done=out.exists, priority=priority, group=group)
+
+
+def eval_jobs(cfg: dict, steps=None, only: list[str] | None = None, section: str = "eval",
+              out_dir: Path | None = None) -> list[Job]:
+    """One job per (eval block, checkpoint); jobs whose checkpoints are unknown yet
+    (training in progress) are returned with ready() False. `section` names the config
+    section holding the blocks (`eval`, or another one listed in `eval_sections`);
+    results land in `out_dir` (default <run_dir>/eval)."""
+    t = te()
     run_dir = run_dir_of(cfg)
     view = train_eval_config(cfg)
-    blocks = t.eval_blocks(view.get("eval") or {})
+    blocks = t.eval_blocks(view.get(section) or {})
+    out_root = Path(out_dir) if out_dir else run_dir / "eval"
     if only:
         blocks = [(n, b) for n, b in blocks if any(fnmatch.fnmatch(n, p) for p in only)]
     base_model = view["base_model"]
@@ -360,49 +422,9 @@ def eval_jobs(cfg: dict, steps=None, only: list[str] | None = None) -> list[Job]
 
     def make(name, blk, step, lora):
         stem = f"checkpoint-{step}" if lora else "base"
-        out = run_dir / "eval" / name / f"{stem}.json"
-
-        async def run():
-            tc = tc_of()
-            gen_cfg = t.build_generate_config(tc, blk)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            t0 = time.time()
-            chunk = int(blk.get("chunk") or 0)
-            inner = make_generate_fn(base_model, gen_cfg, lora)
-
-            async def gen(messages_list):
-                if not chunk:
-                    return await inner(messages_list)
-                parts = [messages_list[i:i + chunk] for i in range(0, len(messages_list), chunk)]
-                outs = await asyncio.gather(*[inner(p) for p in parts])
-                return [r for o in outs for r in o]
-
-            result = await eval_cotcontrolqa(
-                model=base_model, system_prompt=t.resolve_system_prompt(blk["system_prompt"]), generate_fn=gen,
-                save_dir=out.parent, save_name=out.stem, dataset=blk["dataset"], mode=blk["mode"],
-                allowed_modes=blk["allowed_modes"], seed=int(blk["seed"]),
-                state_requirement=bool(blk["state_requirement"]), max_samples=blk["max_samples"],
-                subsample_seed=blk["subsample_seed"], split=blk["split"],
-                grade_meta_discussion=blk["grade_meta_discussion"],
-                meta_discussion_scope=blk.get("meta_discussion_scope", "compliant"),
-                judge_model=blk["judge_model"], judge_concurrency=int(blk["judge_concurrency"]),
-                backend_info={"base_model": base_model, "lora_path": lora, "generate_config": dataclasses.asdict(gen_cfg)},
-            )
-            from kaushik.core.results import honest_rate
-
-            s = result["summary"]
-            append_jsonl(run_dir / "eval_progress.jsonl", {
-                "block": name, "step": step, "lora_path": lora, "accuracy": s["accuracy"],
-                "compliance_rate": s["compliance_rate"], "honest_rate": honest_rate(result),
-                "meta_discussion_rate": s["meta_discussion_rate"], "n_errors": s["n_errors"],
-                "n_rollouts": s["n_rollouts"], "per_mode": s["per_mode"], "seconds": round(time.time() - t0),
-                "time": datetime.now().isoformat()})
-            print(f"[done] {run_dir.name} {name} {stem}: compliance={s['compliance_rate']} "
-                  f"accuracy={s['accuracy']} errors={s['n_errors']}", flush=True)
-
-        return Job(name=f"eval:{run_dir.name}/{name}/{stem}", weight=block_weight(blk), run=run,
-                   done=out.exists, priority=(1, cfg.get("model") or "", 0 if name.endswith("lowercase_thinking") else 1, name),
-                   group=str(run_dir))
+        return eval_block_job(name, blk, base_model, tc_of, lora, out_root / name / f"{stem}.json",
+                              priority=(1, cfg.get("model") or "", 0 if name.endswith("lowercase_thinking") else 1, name),
+                              group=str(run_dir), progress=out_root.parent / "eval_progress.jsonl")
 
     def expand(name, blk):
         return [make(name, blk, step, lora) for step, lora in targets(blk)]
@@ -424,6 +446,8 @@ def eval_main(cfg: dict, argv: list[str]) -> None:
     a = _common_args("eval", argv,
                      ("--steps", {"nargs": "*", "help": "'final', 'all' or checkpoint steps (default: config eval_steps)"}),
                      ("--blocks", {"nargs": "*", "help": "glob patterns of block names"}),
+                     ("--section", {"default": "eval", "help": "config section holding the blocks (eval_sections)"}),
+                     ("--out-dir", {"default": None, "help": "where <block>/<stem>.json land (default <run_dir>/eval)"}),
                      ("--once", {"action": "store_true"}))
     steps = None
     if a.steps:
@@ -432,12 +456,13 @@ def eval_main(cfg: dict, argv: list[str]) -> None:
     run_dir = run_dir_of(cfg)
     if not a.dry_run:   # a dry run touches nothing in the run dir
         prepare_run(cfg, force=a.force)
-    jobs = eval_jobs(cfg, steps, a.blocks)
+    out_dir = Path(a.out_dir) if a.out_dir else None
+    jobs = eval_jobs(cfg, steps, a.blocks, section=a.section, out_dir=out_dir)
     view = train_eval_config(cfg)
-    blocks = te().eval_blocks(view.get("eval") or {})
+    blocks = te().eval_blocks(view.get(a.section) or {})
 
     def on_done(group, js):
-        write_eval_summary(Path(group), blocks, view["base_model"], view["run_name"])
+        write_eval_summary(out_dir.parent if out_dir else Path(group), blocks, view["base_model"], view["run_name"])
 
     run_scheduler(jobs, run_dir.parent, cap=a.cap, name="eval_scheduler", dry_run=a.dry_run, on_group_done=on_done)
 

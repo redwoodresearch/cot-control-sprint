@@ -1,0 +1,22 @@
+# Eval-only TEST blocks of the selected mid checkpoint (fmt @25, 3 seeds) in runs/<run>-step25/ (the run dirs
+# hold config.yaml + a train_result.json copied from the source run by the old `test_step` helper).
+#   run.py sweep elicit/nocot_sft/sweeps/test_step25.yaml --check "kaushik/elicit/nocot_sft/runs/nocot-fmt-*-step25/config.yaml"
+experiment: elicit/nocot_sft
+job: eval
+run_name: "nocot-{arm}-gptoss20b-seed{seed}-step{step}"
+seeds: [0, 1, 2]
+axes:
+  - - _label: {arm: fmt, step: 25}
+      train.data_path: kaushik/elicit/nocot_sft/data/fmt.jsonl
+      source_run: "kaushik/elicit/nocot_sft/runs/nocot-fmt-gptoss20b-seed{seed}"
+      eval_steps: [25]
+      eval.val_modes.run: false            # the val numbers come from the source run
+      eval.val_heldout.run: false
+      eval.val_baseline.run: false
+      eval.val_modes.eval_at_steps: &s [25]
+      eval.val_heldout.eval_at_steps: *s
+      eval.val_baseline.eval_at_steps: *s
+      eval.final_modes.eval_at_steps: *s
+      eval.final_heldout.eval_at_steps: *s
+      eval.final_baseline.eval_at_steps: *s
+max_gpus: 6

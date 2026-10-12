@@ -12,7 +12,6 @@ remove_path         CPU: delete a built checkpoint (13 GB each) once its evals a
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -21,8 +20,13 @@ import modal
 _p = Path(__file__).resolve().parents
 if len(_p) > 3:  # local checkout: make `cotcontrol` importable; in-container the file sits at /root next to it
     sys.path.insert(0, str(_p[3]))
-from cotcontrol.training.modal_app import (CHECKPOINTS_PATH, HF_CACHE_PATH, checkpoints_vol,  # noqa: E402
-                                           hf_cache_vol, train_image)
+from cotcontrol.training.modal_app import (
+    CHECKPOINTS_PATH,
+    HF_CACHE_PATH,
+    checkpoints_vol,
+    hf_cache_vol,
+    train_image,
+)
 
 app = modal.App("cot-control-sprint_kaushik-reddy_sub-gepa-distill_steer")
 
@@ -160,7 +164,7 @@ def extract(pairs: list[dict], out_name: str, verify: tuple | None = (12, 2.0), 
 
 @app.function(image=cpu_image, volumes=VOLUMES, timeout=3600, memory=32768, cpu=4)
 def build_checkpoint(vec_name: str, kind: str, layer: int, alpha: float, dst_name: str, seed: int = 0,
-                     proj_vec_name: str | None = None) -> dict:
+                     proj_vec_name: str | None = None, snapshot: str = SNAPSHOT) -> dict:
     """kind: 'last' | 'suffix_mean' (alpha * mean-diff vector) | 'random' (Gaussian direction, norm = alpha*||last[layer]||)
     | 'resid' (last[layer] with proj_vec_name's last[layer] direction projected out, rescaled to alpha*||last[layer]||)."""
     import json
@@ -192,10 +196,10 @@ def build_checkpoint(vec_name: str, kind: str, layer: int, alpha: float, dst_nam
     else:
         v = alpha * payload["vectors"][kind][layer].float()
     key = f"model.layers.{layer}.self_attn.o_proj.bias"
-    index = json.loads((Path(SNAPSHOT) / "model.safetensors.index.json").read_text())
+    index = json.loads((Path(snapshot) / "model.safetensors.index.json").read_text())
     shard = index["weight_map"][key]
     dst.mkdir(parents=True, exist_ok=True)
-    for f in Path(SNAPSHOT).iterdir():
+    for f in Path(snapshot).iterdir():
         if not f.is_file():
             continue  # original/, metal/ subfolders
         if f.name == shard:

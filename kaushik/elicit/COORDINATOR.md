@@ -9,3 +9,14 @@
 - Teardown when done: `modal app stop` every `cot-control-sprint_kaushik-reddy_sub-*` app.
 - Follow-ups (15:10): C1 gepa_dose ae475f011e3e80563, C2 len_teacher a38a588a46ec8d0bc, C3 lora_arith aeb3c09cadc3e9df2.
   B2's gl_common.py / distill_app.py read ELICIT_SUB for app names so follow-ups reuse B2's code under their own apps.
+
+## Refactor phase B (2026-10-12)
+- `kaushik/elicit/{nocot_sft, gepa_distill, gepa_lora, gepa_dose, len_teacher, lora_arith}` migrated to the core config /
+  sweep / scheduler layer; shared code in `kaushik/elicit/common/` (README). Per-folder `cli.py`, `*_common.py`,
+  `evalrun.py` / `distill_app.py` / `noise.py` copies and the bash sweeps are gone; `ELICIT_SUB` and the
+  `COTCONTROL_MODAL_*_APP` exports are replaced by `modal.sub` in each config.yaml.
+- Checks: `uv run --with pytest pytest kaushik/elicit/tests` (config equivalence of every sweep against the run manifests /
+  configs); analysis equivalence per folder README (draw counts per table). `writeup/collect.py` and the figure scripts were
+  re-run on a scratch copy after the migration.
+- Deployed sub-apps must be redeployed before any new launch (`run.py elicit/<ws> deploy`): the single trainer in
+  `common/distill_app.py` takes `out_root` / `base_model` in its config and `read_log(run, tail, out_root)`.

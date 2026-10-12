@@ -1,0 +1,38 @@
+# Workstream B: GEPA teacher check + steering vector (README.md). This folder holds the reference evals
+# (teacher_val / untrained_val / teacher_test) the other elicit workstreams symlink, so `analysis.refs` is
+# empty here. Protocol, GEPA prompt pin (`distill.teacher`) and analysis come from ../config.yaml.
+# Sweeps: sweeps/refs.yaml, sweeps/steer_sweep.yaml, sweeps/steer_final.yaml. Steering jobs: steer.py.
+extends: ../config.yaml
+modal:
+  sub: gepa-distill
+  apps:
+    steer: {file: kaushik/elicit/gepa_distill/steer_app.py}
+analysis:
+  refs: {}
+steer:                       # steer.py (local driver) / steer_app.py (Modal: extract, build_checkpoint, remove_path)
+  vol_dir: /checkpoints/gepa_distill
+  hf_snapshot: /cache/hf/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+  prompts:                   # `extract --prompt <key>`: null = the GEPA prompt (distill.teacher), else the literal
+    gepa: null
+    brevity: "Keep your reasoning brief."
+  extract:
+    n: 300                   # train-split prompt pairs (with / without the system prompt)
+    seed: 1                  # question subsample + mode assignment
+    name: v1                 # vectors_<name>.json / <vol_dir>/steer/vectors/<name>.pt (vbrief for the brevity prompt)
+    prompt: gepa
+    verify_layer: 12         # bias edit == forward hook check
+    verify_alpha: 2.0
+  build:
+    vec: v1
+    kind: last               # last | suffix_mean | random | resid
+    layers: [6, 9, 12, 15]
+    alphas: [1, 2, 4]        # multiples of the vector (random / resid: of ||v_last[layer]||)
+    seed: 0                  # random direction seed
+    proj: null               # kind=resid: vector name whose `last` direction is projected out (vbrief)
+  sweep:                     # the 40-question screen of built checkpoints (sweeps/steer_sweep.yaml)
+    prefix: sw_
+    blocks: [modes]
+    max_questions: 40
+    subsample_seed: 1
+    chunk: 400
+    split: val

@@ -77,8 +77,51 @@ Same table, plus full-val rows, in `results/test_table.md` (identical to the wri
    Overall: no dose, stack or effort setting moves honest_long off the floor (≤1.3% on test); the LoRA's gain remains a
    brevity effect.
 
+## Layout and commands (migrated to `kaushik/core` + `kaushik/elicit/common`, 2026-10-12)
+
+Every run derives from `../config.yaml` (shared protocol, trainer / noise / analysis definitions) + `config.yaml`
+(Modal sub-app `gepa-dose`, the scaled-adapter paths, the probe, `analysis.style: dose`) + a point of a sweep in
+`sweeps/`. Experiment code is only `probe.py`; `evalrun.py` and `analyze.py` are shims onto
+`kaushik/elicit/common/{candidate_eval,analyze}.py` (the one candidate-eval runner and the one analysis shared by
+the elicit workstreams; the old `dose_common.py` / `cli.py` / evalrun copy are gone).
+
+```bash
+R=".venv/bin/python kaushik/run.py"
+$R sweep elicit/gepa_dose/sweeps/dose.yaml --dry-run          # x{dose}_sw: 10 doses, 40 val q, no prompt
+$R sweep elicit/gepa_dose/sweeps/dose_prompt.yaml --dry-run   # x{dose}_prompt_sw: + GEPA prompt
+$R sweep elicit/gepa_dose/sweeps/effort.yaml --dry-run        # {x1,prompt,untrained}_high_sw
+$R sweep elicit/gepa_dose/sweeps/{val,test}.yaml --dry-run    # x1.5, x0.75+prompt, x1.3: full val (seed 0) + test x 3 seeds
+$R elicit/gepa_dose probe                                     # runs/_probe/dose.json (probe.doses, probe.seed)
+$R elicit/gepa_dose evalrun --status                          # blocks present per run
+.venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_dose/sweeps/*.yaml   # config equivalence vs manifests
+```
+
+Tables (`analysis.bootstrap_draws` 1000, seed 0; `--subset x0.5_sw` restricts the full-val references to the
+40 sweep questions):
+
+```bash
+A="$R elicit/gepa_dose analyze"
+$A --subset x0.5_sw --out results/sweep.md --runs untrained_val,teacher_val,x1_val,x0.5_sw,x0.75_sw,x1.05_sw,x1.1_sw,x1.15_sw,x1.2_sw,x1.3_sw,x1.5_sw,x2_sw,x3_sw,x0.75_prompt_sw,x1_prompt_sw,x1.05_prompt_sw,x1.1_prompt_sw,x1.15_prompt_sw,x1.2_prompt_sw,x1.3_prompt_sw,x1.5_prompt_sw,x2_prompt_sw,x1_high_sw,prompt_high_sw,untrained_high_sw
+$A --subset x0.5_sw --out results/sweep_effort.md --runs x1_high_sw,prompt_high_sw,untrained_high_sw,x1_val,teacher_val,untrained_val,x1_prompt_sw,x1.5_prompt_sw,x2_prompt_sw,x1.5_sw
+$A --out results/test_table.md --runs x1.3_test_s0,x1.3_test_s1,x1.3_test_s2,x1.5_test_s0,x1.5_test_s1,x1.5_test_s2,x0.75_prompt_test_s0,x0.75_prompt_test_s1,x0.75_prompt_test_s2,x1_test_s0,x1_test_s1,x1_test_s2,teacher_test,untrained_test,x1.3_val,x1.5_val,x0.75_prompt_val,x1_val,teacher_val,untrained_val
+$A --out results/test_table_prelim.md --runs x1.5_test_s0,x1.5_test_s1,x1.5_test_s2,x1_test_s0,x1_test_s1,x1_test_s2,teacher_test,untrained_test,x1.5_val,x1_val,teacher_val,untrained_val
+```
+
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
+
+- Config equivalence: the 5 sweeps reproduce all 34 run manifests (`check.py` PASS: split, adapter, prompt,
+  effort, blocks, question subset and every engine knob). `candidate.chunk` (400 for the sweeps, 600 for the
+  x1.3 wave per STATE.md) is not recorded in the manifests and is unverifiable.
+- Analysis equivalence: `sweep`, `test_table`, `test_table_prelim` (`.md` and `.json`) are byte-identical after
+  re-running the commands above. `sweep_effort` differs in one row: the committed table was built at 15:17 PT
+  while `untrained_high_sw`'s modes block was still running (STATE.md), so it shows `n_modes 0` and `-` for the
+  modes metrics; the block finished later and the re-run fills the row in (honest 0.0, median 18511 chars,
+  as reported in the text above). Every other row is identical.
+- Scaled adapters on the volume were built by hand (`lora_alpha` 32 -> 32 x dose in `adapter_config.json`,
+  `modal volume put`); `dose.vol_dir` / `dose.b2_adapter` in `config.yaml` name them.
+
 ## Files
 
-`dose_common.py` (B2's constants under `ELICIT_SUB=sub-gepa-dose`) · `evalrun.py` · `probe.py` · `analyze.py` · `cli.py` ·
+`config.yaml` · `sweeps/{dose,dose_prompt,effort,val,test}.yaml` · `probe.py` · `evalrun.py`, `analyze.py` (shims) ·
 `runs/<run>/{manifest.json,modes.json,heldout.json,baseline.json,eval.log}` (every rollout + judge output) ·
 `runs/_probe/dose.json` · `results/{sweep,sweep_effort,test_table_prelim,test_table}.md|json`.

@@ -1,72 +1,59 @@
 """Training rows for every arm (orange row format: {"input", "output", "meta"}).
 
-  answer_only  = kaushik/fragility/data/mcq_noreason.jsonl, used in place (1A rows:
-                 user = question, target = letter; reasoning conditioned off by the
-                 config's masked empty-analysis prefill + reasoning_effort low).
-  anchor.jsonl   the 2,027 self-distilled correct gpt-oss-20b rollouts
-                 (fragility/data/mcq_reason_gptoss20b.jsonl; sampled at medium, T=1)
-                 with a per-row render override: reasoning ON, reasoning_effort
-                 medium, no prefill. The reasoning in the target is the model's own
-                 unmodified output; no control behaviour is supervised in it.
+  answer_only  = data.answer_only (kaushik/fragility/data/mcq_noreason.jsonl), used in place (1A rows:
+                 user = question, target = letter; reasoning conditioned off by the config's masked
+                 empty-analysis prefill + reasoning_effort low).
+  anchor.jsonl   the self-distilled correct gpt-oss-20b rollouts (data.reason; sampled at medium, T=1)
+                 with a per-row render override (data.anchor_render: reasoning ON, reasoning_effort
+                 medium, no prefill). The reasoning in the target is the model's own unmodified output;
+                 no control behaviour is supervised in it.
   mix.jsonl      answer_only + anchor, shuffled (arm b).
-  fmt.jsonl      constrained-OUTPUT rows (arm c): user = question + a format
-                 requirement on the RESPONSE; target = the model's own explained
-                 answer (data/answers/) transformed programmatically into a
-                 compliant response (sft/transforms.py) and verified with the eval
-                 grader. Reasoning conditioned off, exactly like answer_only. Two
-                 modes per item, drawn from FMT_MODES (never the 3 held-out eval
-                 modes / families).
+  fmt.jsonl      constrained-OUTPUT rows (arm c): user = question + a format requirement on the RESPONSE;
+                 target = the model's own explained answer (data/answers/, gen_answers.py) transformed
+                 programmatically into a compliant response (sft/transforms.py) and verified with the eval
+                 grader. Reasoning conditioned off, exactly like answer_only. data.modes_per_item modes per
+                 item, drawn from data.fmt_modes (never the 3 held-out eval modes / families).
   fmt_mix.jsonl  fmt + anchor (arm d).
 
-    .venv/bin/python kaushik/run.py elicit/nocot_sft build_data [--modes-per-item 2]
+    run.py elicit/nocot_sft build_data [data.modes_per_item=2 data.seed=0]
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import random
 from collections import Counter
+from pathlib import Path
 
-from common import DATA, EVAL_KWARGS, FRAG_DATA, ROOT, read_jsonl, sha256_file, write_dataset
-
-from cotcontrol.eval.grading import grade_compliance
-from cotcontrol.eval.prompts import CONTROL_TYPE_REQUIREMENTS, HELDOUT_MODES, MODE_VARIANTS, base_mode, get_control_value
-from sft.transforms import TRANSFORMS
-
-ANSWER_ONLY = FRAG_DATA / "mcq_noreason.jsonl"
-REASON = FRAG_DATA / "mcq_reason_gptoss20b.jsonl"
-ANSWERS = DATA / "answers" / "rollouts.jsonl"
-
-# Output-format modes for arm (c): the 6 string-transformable eval training modes,
-# two value-variants of them, and 8 extended modes. None is a held-out eval mode
-# or shares its family (sentence-start insertion, letter suppression, whitespace
-# removal). word_suppression / ignore_question have no programmatic transform.
-FMT_MODES = ["lowercase_thinking", "uppercase_thinking", "alternating_case", "end_of_sentence",
-             "meow_between_words", "repeat_sentences", "end_of_sentence_indeed", "bark_between_words",
-             "no_comma", "title_case", "bracket_words", "paren_words", "quote_wrap",
-             "question_terminators", "one_sentence_per_line", "capitalize_and"]
-assert not set(FMT_MODES) & set(HELDOUT_MODES)
-ANCHOR_RENDER = {"chat_template_kwargs": EVAL_KWARGS, "assistant_prefill": None}
+from kaushik.core.io import ROOT, read_jsonl, sha256_file, write_jsonl
 
 
 def requirement_for_response(mode: str) -> str:
     """The eval's requirement sentence re-targeted at the visible response."""
+    from cotcontrol.eval.prompts import (
+        CONTROL_TYPE_REQUIREMENTS,
+        base_mode,
+        get_control_value,
+    )
+
     value = get_control_value(mode, {})
     text = CONTROL_TYPE_REQUIREMENTS[base_mode(mode)].format(
         control_value=value, reasoning_term="response", control_value_upper=str(value).upper())
-    text = text.replace(" This requirement applies ONLY to your response, not to your response/output space.", "")
-    return text
+    return text.replace(" This requirement applies ONLY to your response, not to your response/output space.", "")
 
 
-def fmt_rows(answers: list[dict], modes_per_item: int, seed: int) -> tuple[list[dict], Counter]:
+def fmt_rows(answers: list[dict], fmt_modes: list[str], modes_per_item: int, seed: int) -> tuple[list[dict], Counter]:
+    from cotcontrol.eval.grading import grade_compliance
+    from cotcontrol.eval.prompts import MODE_VARIANTS
+    from sft.transforms import TRANSFORMS
+
     rng, rows, stats = random.Random(seed), [], Counter()
     for a in answers:
         if not a["kept"]:
             stats["skipped_source"] += 1
             continue
         question = a["messages"][0]["content"]
-        for mode in rng.sample(FMT_MODES, modes_per_item):
+        for mode in rng.sample(fmt_modes, modes_per_item):
             out = TRANSFORMS[mode](a["output"].strip(), {})
             if out is None:
                 stats[f"skip_transform:{mode}"] += 1
@@ -84,45 +71,50 @@ def fmt_rows(answers: list[dict], modes_per_item: int, seed: int) -> tuple[list[
     return rows, stats
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--modes-per-item", type=int, default=2)
-    ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args(argv)
-    rng = random.Random(args.seed)
+def write_dataset(rows: list[dict], path: Path, manifest: dict) -> None:
+    write_jsonl(path, rows)
+    manifest = {"n_rows": len(rows), "sha256": sha256_file(path), **manifest, "example_row": rows[0]}
+    path.with_suffix(".jsonl.manifest.json").write_text(json.dumps(manifest, indent=2))
+    print(f"wrote {len(rows)} rows -> {path.relative_to(ROOT)} (sha256 {manifest['sha256'][:12]}...)")
 
-    answer_only = read_jsonl(ANSWER_ONLY)
-    anchor = [{**r, "render": ANCHOR_RENDER, "meta": {**r.get("meta", {}), "arm_role": "anchor"}}
-              for r in read_jsonl(REASON)]
-    write_dataset(anchor, DATA / "anchor.jsonl", {
-        "source": str(REASON.relative_to(ROOT)), "source_sha256": sha256_file(REASON),
-        "render": ANCHOR_RENDER, "note": "model's own medium-effort reasoning kept; reasoning ON at train time"})
+
+def main(cfg: dict, argv: list[str]) -> None:
+    from cotcontrol.eval.prompts import HELDOUT_MODES
+
+    d = cfg["data"]
+    out, seed = ROOT / d["out"], int(d["seed"])
+    fmt_modes = list(d["fmt_modes"])
+    assert not set(fmt_modes) & set(HELDOUT_MODES)
+    answer_only_path, reason_path, answers_path = ROOT / d["answer_only"], ROOT / d["reason"], out / "answers" / "rollouts.jsonl"
+    rng = random.Random(seed)
+
+    answer_only = read_jsonl(answer_only_path)
+    anchor = [{**r, "render": d["anchor_render"], "meta": {**r.get("meta", {}), "arm_role": "anchor"}}
+              for r in read_jsonl(reason_path)]
+    write_dataset(anchor, out / "anchor.jsonl", {
+        "source": d["reason"], "source_sha256": sha256_file(reason_path),
+        "render": d["anchor_render"], "note": "model's own medium-effort reasoning kept; reasoning ON at train time"})
 
     mix = answer_only + anchor
     rng.shuffle(mix)
-    write_dataset(mix, DATA / "mix.jsonl", {
-        "sources": {str(ANSWER_ONLY.relative_to(ROOT)): sha256_file(ANSWER_ONLY),
-                    str(REASON.relative_to(ROOT)): sha256_file(REASON)},
-        "n_answer_only": len(answer_only), "n_anchor": len(anchor), "seed": args.seed})
+    write_dataset(mix, out / "mix.jsonl", {
+        "sources": {d["answer_only"]: sha256_file(answer_only_path), d["reason"]: sha256_file(reason_path)},
+        "n_answer_only": len(answer_only), "n_anchor": len(anchor), "seed": seed})
 
-    if ANSWERS.exists():
-        answers = read_jsonl(ANSWERS)
-        fmt, stats = fmt_rows(answers, args.modes_per_item, args.seed)
-        rng.shuffle(fmt)
-        write_dataset(fmt, DATA / "fmt.jsonl", {
-            "source": str(ANSWERS.relative_to(ROOT)), "source_sha256": sha256_file(ANSWERS),
-            "modes": FMT_MODES, "modes_per_item": args.modes_per_item, "seed": args.seed,
-            "stats": dict(sorted(stats.items())),
-            "requirements": {m: requirement_for_response(m) for m in FMT_MODES}})
-        fmt_mix = fmt + anchor
-        rng.shuffle(fmt_mix)
-        write_dataset(fmt_mix, DATA / "fmt_mix.jsonl", {
-            "sources": {"fmt.jsonl": sha256_file(DATA / "fmt.jsonl"), "anchor.jsonl": sha256_file(DATA / "anchor.jsonl")},
-            "n_fmt": len(fmt), "n_anchor": len(anchor), "seed": args.seed})
-        print(json.dumps({k: v for k, v in stats.items() if not k.startswith("ok:")}, indent=1))
-    else:
-        print(f"{ANSWERS.relative_to(ROOT)} missing: run gen_answers first (fmt / fmt_mix skipped)")
-
-
-if __name__ == "__main__":
-    main()
+    if not answers_path.exists():
+        print(f"{answers_path.relative_to(ROOT)} missing: run gen_answers first (fmt / fmt_mix skipped)")
+        return
+    answers = read_jsonl(answers_path)
+    fmt, stats = fmt_rows(answers, fmt_modes, int(d["modes_per_item"]), seed)
+    rng.shuffle(fmt)
+    write_dataset(fmt, out / "fmt.jsonl", {
+        "source": str(answers_path.relative_to(ROOT)), "source_sha256": sha256_file(answers_path),
+        "modes": fmt_modes, "modes_per_item": int(d["modes_per_item"]), "seed": seed,
+        "stats": dict(sorted(stats.items())),
+        "requirements": {m: requirement_for_response(m) for m in fmt_modes}})
+    fmt_mix = fmt + anchor
+    rng.shuffle(fmt_mix)
+    write_dataset(fmt_mix, out / "fmt_mix.jsonl", {
+        "sources": {"fmt.jsonl": sha256_file(out / "fmt.jsonl"), "anchor.jsonl": sha256_file(out / "anchor.jsonl")},
+        "n_fmt": len(fmt), "n_anchor": len(anchor), "seed": seed})
+    print(json.dumps({k: v for k, v in stats.items() if not k.startswith("ok:")}, indent=1))

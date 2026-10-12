@@ -1,0 +1,13 @@
+# Plan step 3, never launched (STATE.md: GEPA-style gains cannot be decoupled from brevity by prompting):
+# B2's trainer with a C2 teacher prompt (its own chat-template kwargs, e.g. reasoning_effort high).
+# Hyperparameters = B2's gl_r16_lr1e-4 config (../config.yaml `distill`).
+experiment: elicit/len_teacher
+job: distill
+run_name: "lt_{variant}_s{seed}"
+axes:
+  - - {_label: {variant: len_append}, distill.teacher.system_prompt: kaushik/elicit/len_teacher/prompts/len_append.txt,
+       distill.teacher.sha256: null, distill.teacher.chat_template_kwargs: {reasoning_effort: medium}}
+    - {_label: {variant: high}, distill.teacher.system_prompt: kaushik/elicit/len_teacher/prompts/gepa.txt,
+       distill.teacher.sha256: null, distill.teacher.chat_template_kwargs: {reasoning_effort: high}}
+  - [{_label: {seed: 0}, distill.seed: 0}]
+max_gpus: 24

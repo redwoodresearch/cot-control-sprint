@@ -25,25 +25,49 @@ layer. Protocol, rules and budget: `../PLAN.md`. Live state: `STATE.md`. Results
 4. **Test**: the selected combination(s) with 3 seeds (GEPA seed k − λ·brevity seed k), KL-matched random-LoRA control
    (`noise.py`), 95% bootstrap CIs over questions. Untrained / GEPA-LoRA / teacher numbers are reused from B2 and B.
 
-## Stages
+## Layout and commands (migrated to `kaushik/core`, 2026-10-12)
 
+Every run derives from `../config.yaml` (shared elicit protocol, trainer defaults, noise recipe, analysis) +
+`config.yaml` (Modal sub-apps `..._sub-lora-arith_*`, the brevity / verbosity teacher prompts, checkpoint roots,
+combiner knobs) + a point of a sweep in `sweeps/`. Code: `combine.py` (the only experiment-specific job) and
+`arith_app.py` (the CPU combiner app); `evalrun.py`, `distill.py`, `noise.py`, `analyze.py`, `deploy.py` are
+two-line shims onto `kaushik/elicit/common/` (one trainer, one candidate-eval runner, one noise module, one
+analysis shared with B / B2 / C1 / C2).
+
+```bash
+R=".venv/bin/python kaushik/run.py"
+$R elicit/lora_arith deploy                                    # distill + arith + random-lora apps (+ bash kaushik/deploy_modal.sh sub-lora-arith)
+$R sweep elicit/lora_arith/sweeps/train.yaml --dry-run         # brief_s{0,1,2}, verbose_s{0,1,2} (B2's trainer)
+$R sweep elicit/lora_arith/sweeps/combos.yaml --dry-run        # the 13 combined adapters -> runs/_combos/<name>.json
+$R sweep elicit/lora_arith/sweeps/screen.yaml --dry-run        # seed-0 screen 1 (was sweep.sh): 40-q val subset
+$R sweep elicit/lora_arith/sweeps/screen2.yaml --dry-run       # seed-0 screen 2 (was sweep2.sh)
+$R sweep elicit/lora_arith/sweeps/{test,noise,noise_test,loadtest}.yaml --dry-run
+$R elicit/lora_arith analyze --runs ref_gepa_sub,brief_s0_sub,verbose_s0_sub,gepa_m0.5b_s0_sub,gepa_m1.0b_s0_sub,gepa_m1.5b_s0_sub,gepa_m2.0b_s0_sub,gepa_m2.5b_s0_sub,gepa_p0.5v_s0_sub,gepa_p1.0v_s0_sub,gepa_p2.0v_s0_sub,gepa_m1.0b_p1.0v_s0_sub,gepa_m1.5b_p0.5v_s0_sub --out results/sweep_table.md
+$R elicit/lora_arith analyze --runs gepa_m2.0b_test_s0,gepa_m2.0b_test_s1,gepa_m2.0b_test_s2,noise_gepa_m2.0b_test_n0,lr1e-4_c400_test_s0,lr1e-4_c400_test_s1,lr1e-4_c400_test_s2,noise_pooled_lr1e-4_c400_test_s0,noise_pooled_lr1e-4_c400_test_s1,noise_pooled_lr1e-4_c400_test_s2,teacher_test --out results/test_table.md
+$R elicit/lora_arith evalrun --status; $R elicit/lora_arith distill --status
+.venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/lora_arith/sweeps/*.yaml   # config equivalence
+.venv/bin/python kaushik/elicit/spend.py sub-lora-arith
 ```
-export ELICIT_SUB=sub-lora-arith
-R=".venv/bin/python kaushik/run.py elicit/lora_arith"      # (zsh: call it spelled out, $R does not word-split)
-$R deploy                                   # distill + arith + random-lora apps; bash kaushik/deploy_modal.sh sub-lora-arith for inference/train
-$R train --run brief_s0 --teacher brief --seed 0
-$R status [--run NAME]
-$R combine --name gepa_m1.0b_s0 --terms /checkpoints/gepa_lora/gl_r16_lr1e-4_s0/checkpoint-400:1,/checkpoints/lora_arith/brief_s0/checkpoint-400:-1
-$R launch <run> -- --split val --blocks modes --max-questions 40 --subsample-seed 1 --chunk 360 --lora /checkpoints/lora_arith/combos/<name> [;; ...]
-$R noise --group G --adapters A,B,C
-$R analyze [--runs ...]                     # results/table.md (+ B's teacher/untrained rows)
-$R spend
-```
+
+A combination and its eval are two sweeps (`combos.yaml`, then `screen*.yaml` / `test.yaml`) because a sweep
+point has one run name and the eval run (`<name>_sub`) is not the combo record (`runs/_combos/<name>.json`);
+the evals wait for their record through `candidate.requires`.
+
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
+
+- Config equivalence: every sweep point reproduces its record (`common/check.py`): 6/6 trainer configs
+  (`runs/*/result.json`), 13/13 combo term lists, 9 + 4 + 3 + 1 + 1 eval manifests, the noise group. Dry runs
+  report everything as already done. `chunk` is not recorded in manifests (360 on the screens from STATE.md).
+- Analysis equivalence: `results/sweep_table.{md,json}` and `results/test_table.{md,json}` are byte-identical
+  after re-running `analyze` (bootstrap seed 0, 1000 draws). `results/length_buckets.md` was written by hand
+  from an ad hoc bucket count (no script); it is kept as is.
+- Deleted after the checks: `cli.py`, `gl_common.py`, `distill_app.py` (copy of B2's), the old `evalrun.py` /
+  `noise.py` copies, `sweep.sh`, `sweep2.sh` (1038 -> 202 lines of Python here, plus the shared common/).
 
 ## Files
-`gl_common.py` constants · `distill_app.py` (B2's trainer) · `arith_app.py` combiner · `cli.py` · `evalrun.py`, `noise.py`,
-`analyze.py` (B2's, unchanged) · `runs/<run>/` (train.json / log.jsonl / result.json, or eval blocks + manifest + eval.log) ·
-`runs/_combos/<name>.json` build records · `results/`.
+`config.yaml` · `sweeps/` · `combine.py` · `arith_app.py` · shims `evalrun.py`, `distill.py`, `noise.py`, `analyze.py`,
+`deploy.py` · `runs/<run>/` (train.json / log.jsonl / result.json, or eval blocks + manifest) · `runs/_combos/<name>.json`
+build records · `runs/_noise/<group>/` · `results/`.
 
 ## Results
 

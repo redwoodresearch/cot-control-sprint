@@ -1,0 +1,14 @@
+# Test (500 q) of the selected settings with all 3 adapter seeds: x1.5, x0.75 + GEPA prompt, and the x1.3
+# wave (chunk 600). x1 test = B2's lr1e-4_c400_test_s{k} (symlinked x1_test_s{k} references).
+experiment: elicit/gepa_dose
+job: evalrun
+run_name: "{name}_test_s{seed}"
+axes:
+  - - {_label: {name: x1.5}, candidate.lora: "/checkpoints/gepa_dose/s{seed}_x1.5", candidate.chunk: 400}
+    - {_label: {name: x0.75_prompt}, candidate.lora: "/checkpoints/gepa_dose/s{seed}_x0.75",
+       eval.block.system_prompt: monitorability/prompts/gepa_general.txt, candidate.chunk: 400}
+    - {_label: {name: x1.3}, candidate.lora: "/checkpoints/gepa_dose/s{seed}_x1.3", candidate.chunk: 600}
+  - [{_label: {seed: 0}}, {_label: {seed: 1}}, {_label: {seed: 2}}]
+overrides:
+  eval.block.split: test
+max_gpus: 24

@@ -2,6 +2,13 @@
 
 Updated: 2026-10-09 14:05 PDT. Owner agent: Workstream A. Budget cap $380 (stop new launches at $300).
 
+## Migrated to kaushik/core (2026-10-12)
+
+Code is now `config.yaml` + `sweeps/{train,test_step25,ref1a}.yaml` + `gen_answers.py` / `build_data.py` / `analyze.py`
+(`main(cfg, argv)`); training, evals, status and registry are core jobs (`kaushik/run.py elicit/nocot_sft <job>`).
+Config and analysis equivalence verified (README "Layout / reproducing"); `cli.py`, `common.py`, `launch.py`,
+`make_configs.py`, `registry.py` deleted. The commands below this line are historical (pre-migration stages).
+
 ## Modal apps (per-workstream cost tracking)
 
 - `cot-control-sprint_kaushik-reddy_sub-nocot-sft_inference` / `..._train` (deployed 13:5x, 120 s scaledown;

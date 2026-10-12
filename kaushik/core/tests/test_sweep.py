@@ -76,3 +76,23 @@ def test_orange_expand_config_equivalence(sweep_path, globs):
     bad = {k: v for k, v in rep.items() if k != "_unmatched" and v["status"] != "equal"}
     assert not bad, bad
     assert not rep["_unmatched"]
+
+
+def test_equivalence_as_train_eval_sees(scratch_experiment, tmp_path):
+    """Keys train_eval defaults (tensor_parallel_size: 1, max_model_len: 32768) compare equal
+    whether spelled out or not; --strict keeps raw equality."""
+    sweep = {"experiment": "demo/sft", "job": "train", "run_name": "demo-{variant}-{model}-seed{seed}", "seeds": [0],
+             "axes": [[{"_label": {"model": "qwen8b"}, "model": "qwen8b"}], [{"_label": {"variant": "eugene"}}]]}
+    configs = sw.resolve_sweep(sweep)
+    view = train_eval_config(configs[0][1])
+    legacy = yaml.safe_load(yaml.safe_dump(view))
+    for blk in legacy["eval"].values():
+        del blk["tensor_parallel_size"]          # legacy file written before the model table existed
+        blk["max_model_len"] = 32768             # legacy file spelling out a train_eval default
+    p = tmp_path / "legacy.yaml"
+    p.write_text(yaml.safe_dump(legacy))
+    assert sw.check_equivalence(configs, [p])["demo-eugene-qwen8b-seed0"]["status"] == "equal"
+    assert sw.check_equivalence(configs, [p], strict=True)["demo-eugene-qwen8b-seed0"]["status"] == "differs"
+    legacy["eval"]["persona_lowercase_thinking"]["temperature"] = 0.0
+    p.write_text(yaml.safe_dump(legacy))
+    assert sw.check_equivalence(configs, [p])["demo-eugene-qwen8b-seed0"]["status"] == "differs"

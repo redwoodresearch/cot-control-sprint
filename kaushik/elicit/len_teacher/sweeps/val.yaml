@@ -1,0 +1,19 @@
+# Teacher screen on FULL val (200 q x 9 modes + held-out + unconstrained): the 7 prompt variants
+# (STATE.md); gepa itself is Workstream B's teacher_val. Prompts / efforts: config.yaml `variants`.
+#   run.py sweep elicit/len_teacher/sweeps/val.yaml --dry-run
+#   .venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/len_teacher/sweeps/val.yaml
+experiment: elicit/len_teacher
+job: evalrun
+run_name: "{variant}_val"
+axes:
+  - - {_label: {variant: steps_append}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/steps_append.txt, eval.block.chat_template_kwargs: {reasoning_effort: medium}}
+    - {_label: {variant: len_append}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/len_append.txt, eval.block.chat_template_kwargs: {reasoning_effort: medium}}
+    - {_label: {variant: rewrite}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/rewrite.txt, eval.block.chat_template_kwargs: {reasoning_effort: medium}}
+    - {_label: {variant: high}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/gepa.txt, eval.block.chat_template_kwargs: {reasoning_effort: high}}
+    - {_label: {variant: len_append_high}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/len_append.txt, eval.block.chat_template_kwargs: {reasoning_effort: high}}
+    # round 2 (promoted from the 40-q screen)
+    - {_label: {variant: recheck_len}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/recheck_len.txt, eval.block.chat_template_kwargs: {reasoning_effort: medium}}
+    - {_label: {variant: sustain}, eval.block.system_prompt: kaushik/elicit/len_teacher/prompts/sustain.txt, eval.block.chat_template_kwargs: {reasoning_effort: medium}}
+overrides:
+  eval.block.split: val
+max_gpus: 24

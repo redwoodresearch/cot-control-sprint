@@ -1,0 +1,11 @@
+# KL-matched random-LoRA control for the selected combination (3 combos -> 3 noise adapters; only noise0 went to test).
+experiment: elicit/lora_arith
+job: noise
+run_name: "noise-{group}"          # job state only; outputs go to runs/_noise/<group>/
+axes:
+  - - _label: {group: gepa_m2.0b}
+      noise.adapters: [/checkpoints/lora_arith/combos/gepa_m2.0b_s0, /checkpoints/lora_arith/combos/gepa_m2.0b_s1,
+                       /checkpoints/lora_arith/combos/gepa_m2.0b_s2]
+overrides:
+  noise.group: "{group}"
+max_gpus: 24

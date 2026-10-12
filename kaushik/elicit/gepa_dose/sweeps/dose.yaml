@@ -1,0 +1,25 @@
+# Dose sweep (STATE.md 15:11 + fine grid 15:18 PT): seed-0 adapter at each dose, no prompt, medium effort,
+# 40 val questions (subsample seed 1), all three blocks. Dose x1 is B2's original adapter (its full-val run
+# is the x1_val reference symlink). Chunk 400 (3 engine calls per block; not recorded in the manifests).
+#   run.py sweep elicit/gepa_dose/sweeps/dose.yaml --dry-run
+#   .venv/bin/python kaushik/elicit/common/check.py kaushik/elicit/gepa_dose/sweeps/dose.yaml
+experiment: elicit/gepa_dose
+job: evalrun
+run_name: "x{dose}_sw"
+axes:
+  - - {_label: {dose: 0.5}, candidate.lora: /checkpoints/gepa_dose/s0_x0.5}
+    - {_label: {dose: 0.75}, candidate.lora: /checkpoints/gepa_dose/s0_x0.75}
+    - {_label: {dose: 1.05}, candidate.lora: /checkpoints/gepa_dose/s0_x1.05}
+    - {_label: {dose: 1.1}, candidate.lora: /checkpoints/gepa_dose/s0_x1.1}
+    - {_label: {dose: 1.15}, candidate.lora: /checkpoints/gepa_dose/s0_x1.15}
+    - {_label: {dose: 1.2}, candidate.lora: /checkpoints/gepa_dose/s0_x1.2}
+    - {_label: {dose: 1.3}, candidate.lora: /checkpoints/gepa_dose/s0_x1.3}
+    - {_label: {dose: 1.5}, candidate.lora: /checkpoints/gepa_dose/s0_x1.5}
+    - {_label: {dose: 2}, candidate.lora: /checkpoints/gepa_dose/s0_x2}
+    - {_label: {dose: 3}, candidate.lora: /checkpoints/gepa_dose/s0_x3}
+overrides:
+  eval.block.split: val
+  eval.block.max_samples: 40
+  eval.block.subsample_seed: 1
+  candidate.chunk: 400
+max_gpus: 24
