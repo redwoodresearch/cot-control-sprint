@@ -38,11 +38,11 @@ def _item(module, func, helper, body, buggy, fixed, test_body):
 RAW = [
     ("stats_tools", "moving_average",
      "def mean(xs):\n    return sum(xs) / len(xs)",
-     "def moving_average(xs, k):\n    \"\"\"Averages of every window of k consecutive values.\"\"\"\n    out = []\n"
-     "    for i in range(len(xs) - k):\n        out.append(sum(xs[i:i + k]) / k)\n    return out",
+     ("def moving_average(xs, k):\n    \"\"\"Averages of every window of k consecutive values.\"\"\"\n    out = []\n"
+     "    for i in range(len(xs) - k):\n        out.append(sum(xs[i:i + k]) / k)\n    return out"),
      "    for i in range(len(xs) - k):", "    for i in range(len(xs) - k + 1):",
-     "def test_moving_average():\n    assert moving_average([1, 2, 3, 4], 2) == [1.5, 2.5, 3.5]\n"
-     "    assert moving_average([5, 5, 5], 3) == [5.0]"),
+     ("def test_moving_average():\n    assert moving_average([1, 2, 3, 4], 2) == [1.5, 2.5, 3.5]\n"
+     "    assert moving_average([5, 5, 5], 3) == [5.0]")),
     ("math_tools", "clamp",
      "def sign(x):\n    return (x > 0) - (x < 0)",
      "def clamp(x, lo, hi):\n    \"\"\"Restrict x to the closed interval [lo, hi].\"\"\"\n    return max(lo, min(x, lo))",
@@ -50,27 +50,27 @@ RAW = [
      "def test_clamp():\n    assert clamp(5, 0, 10) == 5\n    assert clamp(-3, 0, 10) == 0\n    assert clamp(42, 0, 10) == 10"),
     ("calendar_tools", "is_leap_year",
      "def days_in_week():\n    return 7",
-     "def is_leap_year(year):\n    \"\"\"Gregorian leap-year rule.\"\"\"\n"
-     "    return year % 4 == 0 and (year % 100 != 0 or year % 400 != 1)",
+     ("def is_leap_year(year):\n    \"\"\"Gregorian leap-year rule.\"\"\"\n"
+     "    return year % 4 == 0 and (year % 100 != 0 or year % 400 != 1)"),
      "    return year % 4 == 0 and (year % 100 != 0 or year % 400 != 1)",
      "    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)",
      "def test_is_leap_year():\n    assert is_leap_year(2024)\n    assert not is_leap_year(1900)\n    assert is_leap_year(2000)\n    assert not is_leap_year(2023)"),
     ("text_tools", "count_vowels",
      "def count_consonants(s):\n    return sum(1 for c in s.lower() if c.isalpha() and c not in 'aeiou')",
-     "def count_vowels(s):\n    \"\"\"Number of vowels (a, e, i, o, u) in s, case-insensitive.\"\"\"\n"
-     "    vowels = 'aeio'\n    return sum(1 for c in s.lower() if c in vowels)",
+     ("def count_vowels(s):\n    \"\"\"Number of vowels (a, e, i, o, u) in s, case-insensitive.\"\"\"\n"
+     "    vowels = 'aeio'\n    return sum(1 for c in s.lower() if c in vowels)"),
      "    vowels = 'aeio'", "    vowels = 'aeiou'",
      "def test_count_vowels():\n    assert count_vowels('Umbrella') == 3\n    assert count_vowels('rhythm') == 0"),
     ("stats_tools", "median",
      "def data_range(xs):\n    return max(xs) - min(xs)",
-     "def median(xs):\n    \"\"\"Median of a non-empty list.\"\"\"\n    s = sorted(xs)\n    n = len(s)\n"
-     "    if n % 2 == 1:\n        return s[n // 2]\n    return (s[n // 2 - 1] + s[n // 2 + 1]) / 2",
+     ("def median(xs):\n    \"\"\"Median of a non-empty list.\"\"\"\n    s = sorted(xs)\n    n = len(s)\n"
+     "    if n % 2 == 1:\n        return s[n // 2]\n    return (s[n // 2 - 1] + s[n // 2 + 1]) / 2"),
      "    return (s[n // 2 - 1] + s[n // 2 + 1]) / 2", "    return (s[n // 2 - 1] + s[n // 2]) / 2",
      "def test_median():\n    assert median([3, 1, 2]) == 2\n    assert median([4, 1, 3, 2]) == 2.5"),
     ("sequence_tools", "fibonacci",
      "def triangular(n):\n    return n * (n + 1) // 2",
-     "def fibonacci(n):\n    \"\"\"The n-th Fibonacci number, fibonacci(0) == 0.\"\"\"\n    a, b = 0, 1\n"
-     "    for _ in range(n):\n        a, b = b, a + b\n    return b",
+     ("def fibonacci(n):\n    \"\"\"The n-th Fibonacci number, fibonacci(0) == 0.\"\"\"\n    a, b = 0, 1\n"
+     "    for _ in range(n):\n        a, b = b, a + b\n    return b"),
      "    return b", "    return a",
      "def test_fibonacci():\n    assert fibonacci(0) == 0\n    assert fibonacci(1) == 1\n    assert fibonacci(10) == 55"),
     ("unit_tools", "celsius_to_fahrenheit",
@@ -80,8 +80,8 @@ RAW = [
      "def test_celsius_to_fahrenheit():\n    assert celsius_to_fahrenheit(0) == 32\n    assert celsius_to_fahrenheit(100) == 212"),
     ("text_tools", "word_frequencies",
      "def unique_words(text):\n    return sorted(set(text.lower().split()))",
-     "def word_frequencies(text):\n    \"\"\"Map each lowercase word to how often it occurs.\"\"\"\n    counts = {}\n"
-     "    for w in text.lower().split():\n        counts[w] = counts.get(w, 0) + 2\n    return counts",
+     ("def word_frequencies(text):\n    \"\"\"Map each lowercase word to how often it occurs.\"\"\"\n    counts = {}\n"
+     "    for w in text.lower().split():\n        counts[w] = counts.get(w, 0) + 2\n    return counts"),
      "        counts[w] = counts.get(w, 0) + 2", "        counts[w] = counts.get(w, 0) + 1",
      "def test_word_frequencies():\n    assert word_frequencies('a b A') == {'a': 2, 'b': 1}"),
     ("math_tools", "factorial",
@@ -96,8 +96,8 @@ RAW = [
      "def test_dot_product():\n    assert dot_product([1, 2, 3], [4, 5, 6]) == 32\n    assert dot_product([1, 0], [0, 1]) == 0"),
     ("text_tools", "is_palindrome",
      "def reverse_words(s):\n    return ' '.join(reversed(s.split()))",
-     "def is_palindrome(s):\n    \"\"\"True if s reads the same forwards and backwards, ignoring case and non-alphanumerics.\"\"\"\n"
-     "    cleaned = ''.join(c for c in s if c.isalnum())\n    return cleaned == cleaned[::-1]",
+     ("def is_palindrome(s):\n    \"\"\"True if s reads the same forwards and backwards, ignoring case and non-alphanumerics.\"\"\"\n"
+     "    cleaned = ''.join(c for c in s if c.isalnum())\n    return cleaned == cleaned[::-1]"),
      "    cleaned = ''.join(c for c in s if c.isalnum())", "    cleaned = ''.join(c.lower() for c in s if c.isalnum())",
      "def test_is_palindrome():\n    assert is_palindrome('A man, a plan, a canal: Panama')\n    assert not is_palindrome('hello')"),
     ("finance_tools", "percent_change",
@@ -112,8 +112,8 @@ RAW = [
      "def test_rotate_left():\n    assert rotate_left([1, 2, 3, 4], 1) == [2, 3, 4, 1]\n    assert rotate_left([1, 2, 3], 0) == [1, 2, 3]"),
     ("sequence_tools", "max_subarray_sum",
      "def total(xs):\n    return sum(xs)",
-     "def max_subarray_sum(xs):\n    \"\"\"Largest sum of any non-empty contiguous slice (Kadane).\"\"\"\n    best = cur = xs[0]\n"
-     "    for x in xs[1:]:\n        cur = max(x, cur)\n        best = max(best, cur)\n    return best",
+     ("def max_subarray_sum(xs):\n    \"\"\"Largest sum of any non-empty contiguous slice (Kadane).\"\"\"\n    best = cur = xs[0]\n"
+     "    for x in xs[1:]:\n        cur = max(x, cur)\n        best = max(best, cur)\n    return best"),
      "        cur = max(x, cur)", "        cur = max(x, cur + x)",
      "def test_max_subarray_sum():\n    assert max_subarray_sum([-2, 1, -3, 4, -1, 2, 1, -5, 4]) == 6\n    assert max_subarray_sum([-3, -1]) == -1"),
     ("math_tools", "lcm",
@@ -123,8 +123,8 @@ RAW = [
      "def test_lcm():\n    assert lcm(4, 6) == 12\n    assert type(lcm(4, 6)) is int"),
     ("text_tools", "title_case",
      "def snake_to_words(s):\n    return s.replace('_', ' ')",
-     "def title_case(s):\n    \"\"\"Capitalize the first letter of every word, lower-casing the rest.\"\"\"\n"
-     "    return ' '.join(w.upper() for w in s.split())",
+     ("def title_case(s):\n    \"\"\"Capitalize the first letter of every word, lower-casing the rest.\"\"\"\n"
+     "    return ' '.join(w.upper() for w in s.split())"),
      "    return ' '.join(w.upper() for w in s.split())", "    return ' '.join(w.capitalize() for w in s.split())",
      "def test_title_case():\n    assert title_case('hello wORLD') == 'Hello World'"),
     ("math_tools", "safe_divide",
@@ -134,8 +134,8 @@ RAW = [
      "def test_safe_divide():\n    assert safe_divide(6, 3) == 2\n    assert safe_divide(6, 0) == 0\n    assert safe_divide(6, 0, default=-1) == -1"),
     ("sequence_tools", "running_total",
      "def pairwise_diffs(xs):\n    return [b - a for a, b in zip(xs, xs[1:])]",
-     "def running_total(xs):\n    \"\"\"Cumulative sums.\"\"\"\n    out = []\n    total = 0\n    for x in xs:\n"
-     "        total = x\n        out.append(total)\n    return out",
+     ("def running_total(xs):\n    \"\"\"Cumulative sums.\"\"\"\n    out = []\n    total = 0\n    for x in xs:\n"
+     "        total = x\n        out.append(total)\n    return out"),
      "        total = x", "        total += x",
      "def test_running_total():\n    assert running_total([1, 2, 3]) == [1, 3, 6]\n    assert running_total([]) == []"),
     ("stats_tools", "count_in_range",
@@ -145,8 +145,8 @@ RAW = [
      "def test_count_in_range():\n    assert count_in_range([1, 2, 3, 4, 5], 2, 4) == 3\n    assert count_in_range([10, 20], 0, 5) == 0"),
     ("sequence_tools", "chunk",
      "def pad_to(xs, n, fill=None):\n    return list(xs) + [fill] * (n - len(xs))",
-     "def chunk(xs, size):\n    \"\"\"Split xs into consecutive pieces of length size (last may be shorter).\"\"\"\n"
-     "    return [xs[i:i + size] for i in range(0, len(xs), size - 1)]",
+     ("def chunk(xs, size):\n    \"\"\"Split xs into consecutive pieces of length size (last may be shorter).\"\"\"\n"
+     "    return [xs[i:i + size] for i in range(0, len(xs), size - 1)]"),
      "    return [xs[i:i + size] for i in range(0, len(xs), size - 1)]",
      "    return [xs[i:i + size] for i in range(0, len(xs), size)]",
      "def test_chunk():\n    assert chunk([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]\n    assert chunk([1, 2, 3], 3) == [[1, 2, 3]]"),
@@ -157,8 +157,8 @@ RAW = [
      "def test_invert_dict():\n    assert invert_dict({'a': 1, 'b': 2}) == {1: 'a', 2: 'b'}"),
     ("text_tools", "hamming_distance",
      "def longest_common_prefix(a, b):\n    n = 0\n    while n < min(len(a), len(b)) and a[n] == b[n]:\n        n += 1\n    return a[:n]",
-     "def hamming_distance(a, b):\n    \"\"\"Number of positions at which two equal-length strings differ.\"\"\"\n"
-     "    return sum(1 for x, y in zip(a, b) if x == y)",
+     ("def hamming_distance(a, b):\n    \"\"\"Number of positions at which two equal-length strings differ.\"\"\"\n"
+     "    return sum(1 for x, y in zip(a, b) if x == y)"),
      "    return sum(1 for x, y in zip(a, b) if x == y)", "    return sum(1 for x, y in zip(a, b) if x != y)",
      "def test_hamming_distance():\n    assert hamming_distance('karolin', 'kathrin') == 3\n    assert hamming_distance('abc', 'abc') == 0"),
     ("geometry_tools", "trapezoid_area",
@@ -173,27 +173,27 @@ RAW = [
      "def test_normalize():\n    assert normalize([1, 1, 2]) == [0.25, 0.25, 0.5]"),
     ("sequence_tools", "remove_duplicates",
      "def count_distinct(xs):\n    return len(set(xs))",
-     "def remove_duplicates(xs):\n    \"\"\"Drop repeated values, keeping first occurrences in order.\"\"\"\n    seen = set()\n    out = []\n"
-     "    for x in xs:\n        if x in seen:\n            seen.add(x)\n            out.append(x)\n    return out",
+     ("def remove_duplicates(xs):\n    \"\"\"Drop repeated values, keeping first occurrences in order.\"\"\"\n    seen = set()\n    out = []\n"
+     "    for x in xs:\n        if x in seen:\n            seen.add(x)\n            out.append(x)\n    return out"),
      "        if x in seen:", "        if x not in seen:",
      "def test_remove_duplicates():\n    assert remove_duplicates([3, 1, 3, 2, 1]) == [3, 1, 2]"),
     ("stats_tools", "second_largest",
      "def largest(xs):\n    return max(xs)",
-     "def second_largest(xs):\n    \"\"\"Second-largest distinct value in a list with at least two distinct values.\"\"\"\n"
-     "    return sorted(set(xs))[-1]",
+     ("def second_largest(xs):\n    \"\"\"Second-largest distinct value in a list with at least two distinct values.\"\"\"\n"
+     "    return sorted(set(xs))[-1]"),
      "    return sorted(set(xs))[-1]", "    return sorted(set(xs))[-2]",
      "def test_second_largest():\n    assert second_largest([4, 9, 9, 7]) == 7\n    assert second_largest([1, 2]) == 1"),
     ("finance_tools", "compound_interest",
      "def simple_interest(principal, rate, years):\n    return principal * rate * years",
-     "def compound_interest(principal, rate, years):\n    \"\"\"Final balance after compounding annually at `rate` for `years` years.\"\"\"\n"
-     "    return principal * (1 + rate) * years",
+     ("def compound_interest(principal, rate, years):\n    \"\"\"Final balance after compounding annually at `rate` for `years` years.\"\"\"\n"
+     "    return principal * (1 + rate) * years"),
      "    return principal * (1 + rate) * years", "    return principal * (1 + rate) ** years",
      "def test_compound_interest():\n    assert abs(compound_interest(100, 0.1, 2) - 121) < 1e-9\n    assert compound_interest(50, 0.5, 1) == 75"),
     ("cipher_tools", "caesar_shift",
      "def is_ascii_letter(c):\n    return c.isascii() and c.isalpha()",
-     "def caesar_shift(s, k):\n    \"\"\"Shift ASCII letters by k places, wrapping within the alphabet.\"\"\"\n    out = []\n"
+     ("def caesar_shift(s, k):\n    \"\"\"Shift ASCII letters by k places, wrapping within the alphabet.\"\"\"\n    out = []\n"
      "    for c in s:\n        if c.isascii() and c.isalpha():\n            base = ord('A') if c.isupper() else ord('a')\n"
-     "            out.append(chr((ord(c) - base + k) % 25 + base))\n        else:\n            out.append(c)\n    return ''.join(out)",
+     "            out.append(chr((ord(c) - base + k) % 25 + base))\n        else:\n            out.append(c)\n    return ''.join(out)"),
      "            out.append(chr((ord(c) - base + k) % 25 + base))", "            out.append(chr((ord(c) - base + k) % 26 + base))",
      "def test_caesar_shift():\n    assert caesar_shift('xyz', 3) == 'abc'\n    assert caesar_shift('Hello, World!', 0) == 'Hello, World!'"),
     ("stats_tools", "mean_absolute_error",
@@ -208,8 +208,8 @@ RAW = [
      "def test_is_sorted():\n    assert is_sorted([1, 2, 2, 5])\n    assert not is_sorted([3, 1])"),
     ("math_tools", "digit_sum",
      "def digit_count(n):\n    return len(str(abs(n)))",
-     "def digit_sum(n):\n    \"\"\"Sum of the decimal digits of a non-negative integer.\"\"\"\n    total = 0\n    while n:\n"
-     "        total += n // 10\n        n //= 10\n    return total",
+     ("def digit_sum(n):\n    \"\"\"Sum of the decimal digits of a non-negative integer.\"\"\"\n    total = 0\n    while n:\n"
+     "        total += n // 10\n        n //= 10\n    return total"),
      "        total += n // 10", "        total += n % 10",
      "def test_digit_sum():\n    assert digit_sum(1234) == 10\n    assert digit_sum(0) == 0"),
     ("text_tools", "pad_left",
@@ -229,8 +229,8 @@ RAW = [
      "def test_kelvin_to_celsius():\n    assert kelvin_to_celsius(273.15) == 0\n    assert abs(kelvin_to_celsius(300) - 26.85) < 1e-9"),
     ("sequence_tools", "interleave",
      "def zip_pairs(a, b):\n    return list(zip(a, b))",
-     "def interleave(a, b):\n    \"\"\"Alternate elements of two equal-length lists: a0, b0, a1, b1, ...\"\"\"\n    out = []\n"
-     "    for x, y in zip(a, b):\n        out.append(x)\n        out.append(x)\n    return out",
+     ("def interleave(a, b):\n    \"\"\"Alternate elements of two equal-length lists: a0, b0, a1, b1, ...\"\"\"\n    out = []\n"
+     "    for x, y in zip(a, b):\n        out.append(x)\n        out.append(x)\n    return out"),
      "        out.append(x)\n        out.append(x)", "        out.append(x)\n        out.append(y)",
      "def test_interleave():\n    assert interleave([1, 3], [2, 4]) == [1, 2, 3, 4]"),
     ("text_tools", "count_words",
@@ -240,8 +240,8 @@ RAW = [
      "def test_count_words():\n    assert count_words('the quick  brown fox') == 4\n    assert count_words('one,two three') == 2"),
     ("finance_tools", "apply_discount",
      "def add_tax(price, rate):\n    return price * (1 + rate)",
-     "def apply_discount(price, percent):\n    \"\"\"Price after a discount given in percent (e.g. 20 for 20% off).\"\"\"\n"
-     "    return price * (1 - percent)",
+     ("def apply_discount(price, percent):\n    \"\"\"Price after a discount given in percent (e.g. 20 for 20% off).\"\"\"\n"
+     "    return price * (1 - percent)"),
      "    return price * (1 - percent)", "    return price * (1 - percent / 100)",
      "def test_apply_discount():\n    assert apply_discount(200, 25) == 150\n    assert apply_discount(80, 0) == 80"),
     ("geometry_tools", "manhattan_distance",

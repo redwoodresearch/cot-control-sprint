@@ -1,0 +1,17 @@
+# Pilot: TRAIN split, 60-question seeded subsample x all valid modes = 538 items per arm (feedback wording
+# check; also the transfer context pool), 3 base models x 6 arms, N = 10.
+experiment: retry
+job: run3a
+run_name: "{run}/{model}/{arm}"
+axes:
+  - [{_label: {run: pilot}, run: pilot, items: pilot}]
+  - - {_label: {model: gptoss120b}, model: gptoss120b}
+    - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+  - - {_label: {arm: block}, arm: block}
+    - {_label: {arm: bare}, arm: bare}
+    - {_label: {arm: bare_trace}, arm: bare_trace}
+    - {_label: {arm: critic}, arm: critic}
+    - {_label: {arm: independent}, arm: independent}
+    - {_label: {arm: block_once}, arm: block_once}
+max_gpus: 40

@@ -1,0 +1,16 @@
+# Held-out slice, OpenRouter models: 4 pinned models + the API-served copies of gpt-oss-20b / Qwen3-8B
+# (serving-path cross-check). 250 episodes x 3 scenarios x 2 conditions each; no GPUs.
+#   run.py sweep hidden_constraint/sweeps/heldout_api.yaml --dry-run
+#   run.py hidden_constraint check            # manifest equivalence with runs/heldout_*/manifest.json
+experiment: hidden_constraint
+job: run
+run_name: "{slice}_{model}"
+axes:
+  - [{_label: {slice: heldout}, slice: heldout}]
+  - - {_label: {model: gptoss120b}, model: gptoss120b}
+    - {_label: {model: glm53}, model: glm53}
+    - {_label: {model: dsv4pro}, model: dsv4pro}
+    - {_label: {model: qwen32b}, model: qwen32b}
+    - {_label: {model: gptoss20b_api}, model: gptoss20b_api}
+    - {_label: {model: qwen8b_api}, model: qwen8b_api}
+max_gpus: 25

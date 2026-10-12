@@ -1,0 +1,17 @@
+# Main 3A: test split, the 1000-item subset (configs/main_subset.json), 3 base models x 6 arms, N = 10.
+#   run.py sweep retry/sweeps/main.yaml --dry-run ; run.py retry check   # manifest equivalence
+experiment: retry
+job: run3a
+run_name: "{run}/{model}/{arm}"
+axes:
+  - [{_label: {run: main}, run: main, items: main}]
+  - - {_label: {model: gptoss120b}, model: gptoss120b}
+    - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+  - - {_label: {arm: block}, arm: block}
+    - {_label: {arm: bare}, arm: bare}
+    - {_label: {arm: bare_trace}, arm: bare_trace}
+    - {_label: {arm: critic}, arm: critic}
+    - {_label: {arm: independent}, arm: independent}
+    - {_label: {arm: block_once}, arm: block_once}
+max_gpus: 40

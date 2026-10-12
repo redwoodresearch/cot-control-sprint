@@ -313,38 +313,38 @@ CONFIG_TRANSCRIPT = """transcript_checks:
 NOTATION_PATTERN = r"[=+*/×÷]"
 
 _TEMPLATES = [
-    ("A warehouse has {a} shelves with {b} boxes on each shelf. {c} boxes are shipped out and then "
-     "{d} new boxes arrive. How many boxes are in the warehouse now?",
+    (("A warehouse has {a} shelves with {b} boxes on each shelf. {c} boxes are shipped out and then "
+     "{d} new boxes arrive. How many boxes are in the warehouse now?"),
      lambda a, b, c, d: a * b - c + d, {"a": (4, 30), "b": (6, 40), "c": (5, 90), "d": (3, 60)}),
-    ("A train travels at {a} km per hour for {b} hours and then at {c} km per hour for {d} hours. "
-     "How many kilometres does it travel in total?",
+    (("A train travels at {a} km per hour for {b} hours and then at {c} km per hour for {d} hours. "
+     "How many kilometres does it travel in total?"),
      lambda a, b, c, d: a * b + c * d, {"a": (40, 120), "b": (2, 9), "c": (30, 110), "d": (1, 8)}),
-    ("Adult tickets cost {a} dollars and child tickets cost {b} dollars. A group buys {c} adult tickets "
-     "and {d} child tickets and pays with {e} dollars in cash. How many dollars of change do they get?",
+    (("Adult tickets cost {a} dollars and child tickets cost {b} dollars. A group buys {c} adult tickets "
+     "and {d} child tickets and pays with {e} dollars in cash. How many dollars of change do they get?"),
      lambda a, b, c, d, e: e - (a * c + b * d), {"a": (8, 30), "b": (3, 15), "c": (2, 9), "d": (1, 9), "e": (400, 600)}),
-    ("A rectangular field is {a} metres long and {b} metres wide. Fencing for the whole perimeter costs "
-     "{c} dollars per metre. What is the total cost of the fence in dollars?",
+    (("A rectangular field is {a} metres long and {b} metres wide. Fencing for the whole perimeter costs "
+     "{c} dollars per metre. What is the total cost of the fence in dollars?"),
      lambda a, b, c: 2 * (a + b) * c, {"a": (10, 90), "b": (5, 60), "c": (2, 25)}),
-    ("A bakery makes {a} trays of {b} muffins every day for {c} days. {d} muffins are given away as "
-     "samples. How many muffins are left to sell?",
+    (("A bakery makes {a} trays of {b} muffins every day for {c} days. {d} muffins are given away as "
+     "samples. How many muffins are left to sell?"),
      lambda a, b, c, d: a * b * c - d, {"a": (3, 12), "b": (6, 24), "c": (2, 7), "d": (5, 80)}),
-    ("A library has {a} shelves holding {b} books each and {c} shelves holding {d} books each. "
-     "How many books does the library have?",
+    (("A library has {a} shelves holding {b} books each and {c} shelves holding {d} books each. "
+     "How many books does the library have?"),
      lambda a, b, c, d: a * b + c * d, {"a": (5, 40), "b": (10, 60), "c": (3, 30), "d": (8, 50)}),
-    ("Mia saves {a} dollars every week for {b} weeks and then spends {c} dollars on a bicycle. "
-     "How many dollars does she have left?",
+    (("Mia saves {a} dollars every week for {b} weeks and then spends {c} dollars on a bicycle. "
+     "How many dollars does she have left?"),
      lambda a, b, c: a * b - c, {"a": (12, 60), "b": (10, 40), "c": (50, 300)}),
-    ("Each box holds {a} red marbles and {b} blue marbles. {c} such boxes are emptied into a jar and "
-     "then {d} marbles are taken out. How many marbles remain in the jar?",
+    (("Each box holds {a} red marbles and {b} blue marbles. {c} such boxes are emptied into a jar and "
+     "then {d} marbles are taken out. How many marbles remain in the jar?"),
      lambda a, b, c, d: (a + b) * c - d, {"a": (5, 40), "b": (4, 35), "c": (3, 15), "d": (6, 70)}),
-    ("A worker is paid {a} dollars per hour for {b} regular hours and {c} dollars per hour for {d} "
-     "overtime hours. How many dollars is the worker paid in total?",
+    (("A worker is paid {a} dollars per hour for {b} regular hours and {c} dollars per hour for {d} "
+     "overtime hours. How many dollars is the worker paid in total?"),
      lambda a, b, c, d: a * b + c * d, {"a": (15, 45), "b": (30, 40), "c": (25, 70), "d": (2, 12)}),
-    ("A tank contains {a} litres of water and drains at {b} litres per minute for {c} minutes. "
-     "Then {d} litres are poured in. How many litres are in the tank?",
+    (("A tank contains {a} litres of water and drains at {b} litres per minute for {c} minutes. "
+     "Then {d} litres are poured in. How many litres are in the tank?"),
      lambda a, b, c, d: a - b * c + d, {"a": (600, 990), "b": (4, 20), "c": (5, 25), "d": (10, 120)}),
-    ("A school orders {a} packs of {b} pencils and shares all of them equally among {c} classrooms. "
-     "How many pencils does each classroom receive?",
+    (("A school orders {a} packs of {b} pencils and shares all of them equally among {c} classrooms. "
+     "How many pencils does each classroom receive?"),
      lambda a, b, c: a * b // c, {"a": (6, 40), "b": (10, 48), "c": (4, 12)}),
     ("A car uses {a} litres of fuel per 100 km. How many litres does it use on a trip of {b} km?",
      lambda a, b: a * b // 100, {"a": (4, 12), "b": (200, 2000)}),

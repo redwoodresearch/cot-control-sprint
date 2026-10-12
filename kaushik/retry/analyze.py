@@ -1,18 +1,22 @@
 """Analysis for kaushik/retry: compliance-by-attempt curves per arm with the
 independent / block_once pass@k curves, the 3A-transfer tables, and the
 Experiment 3 correlation (3A scores vs standard-eval compliance) with
-bootstrap intervals and split-half reliability.
+bootstrap intervals and split-half reliability (experiment job).
 
-    .venv/bin/python kaushik/run.py retry analyze --run main [--ckpt-run ckpt] [--transfer-run main]
+    run.py retry analyze run=main [--ckpt-run ckpt] [--transfer-run main] [--no-corr]
 
 Writes runs/<run>/results.md, runs/<run>/results.json and runs/<run>/figures/.
 All intervals are 95% percentile bootstraps over QUESTIONS (every mode/arm
-item of a question moves together), paired across arms.
+item of a question moves together), paired across arms: the retry-specific
+weighted curve bootstrap (a question's weight = its multiplicity in the
+resample, shared across arms) has no core equivalent and keeps its draw
+order; formatting and tables come from kaushik.core.stats.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 import warnings
@@ -20,19 +24,31 @@ from pathlib import Path
 
 import numpy as np
 
-warnings.filterwarnings("ignore", message="Mean of empty slice")
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from retry_arms import BASELINE_OF
-from retry_common import CFG, MODELS, RUNS
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from cotcontrol.eval.grading import is_honest
 from cotcontrol.eval.retry import load_attempts
+from kaushik.core import stats as st
+from kaushik.core.config import resolve
+from kaushik.retry import retry_correlate as corr_lib
+from kaushik.retry.retry_arms import BASELINE_OF
 
+warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+EXP = "retry"
+HERE = Path(__file__).resolve().parent
+RUNS = HERE / "runs"
+# Bootstrap draws and the degenerate-trace threshold: set from the config by main(); module-level so
+# tests (tests/test_retry.py) can shrink them.
 N_BOOT = 1000
 DEGEN_CHARS = 200
 REPORT_KS = (1, 2, 3, 5, 10)
+
+
+def _cfg(cfg: dict | None) -> dict:
+    return cfg if cfg is not None else resolve(EXP)
 
 
 # --------------------------------------------------------------------------
@@ -134,11 +150,6 @@ def ci(samples: np.ndarray, axis=0) -> tuple[np.ndarray, np.ndarray]:
     return np.nanpercentile(samples, 2.5, axis=axis), np.nanpercentile(samples, 97.5, axis=axis)
 
 
-def wmean(x: np.ndarray, w: np.ndarray) -> float:
-    m = ~np.isnan(x)
-    return float((x[m] * w[m]).sum() / w[m].sum()) if w[m].sum() > 0 else float("nan")
-
-
 def arm_summary(d: ArmData, n_q: int, rng: np.random.Generator) -> dict:
     boots = np.stack([cum_curve(d, boot_weights(n_q, rng)) for _ in range(N_BOOT)])
     lo, hi = ci(boots)
@@ -210,16 +221,18 @@ def run_subset(run_dir: Path) -> set | None:
     for man in run_dir.glob("*/*/manifest.json"):
         sub = (json.loads(man.read_text()).get("items") or {}).get("subset")
         if sub:
-            return set(json.loads((Path(__file__).resolve().parent / sub).read_text())["item_ids"])
+            return set(json.loads((HERE / sub).read_text())["item_ids"])
     return None
 
 
-def analyze_3a(run_dir: Path, n: int, labels: list[str] | None = None, item_filter=None) -> dict:
-    rng = np.random.default_rng(0)
+def analyze_3a(run_dir: Path, n: int, labels: list[str] | None = None, item_filter=None, cfg: dict | None = None) -> dict:
+    cfg = _cfg(cfg)
+    models = set(cfg["models"]) | set(labels or [])
+    rng = np.random.default_rng(int(cfg["analysis"]["bootstrap_seed"]))
     if item_filter is None:
         item_filter = run_subset(run_dir)
     out = {}
-    for mdir in sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name in MODELS or (labels and p.name in labels)):
+    for mdir in sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name in models):
         qindex: dict[tuple, int] = {}
         arms = {a.name: load_arm(a, qindex, n) for a in sorted(mdir.iterdir()) if a.is_dir()}
         arms = {k: v for k, v in arms.items() if v is not None and len(v.ids)}
@@ -267,8 +280,14 @@ def eval_json_items(path: Path) -> list[dict]:
     return rows
 
 
-def analyze_transfer(run_dir: Path) -> dict:
-    rng = np.random.default_rng(1)
+TRANSFER_PAIRS = [("history_bare", "fewshot_matched_bare"), ("history_critic", "fewshot_matched_critic"),
+                  ("critic_only", "none"), ("history_bare", "none"), ("history_critic", "none"),
+                  ("fewshot_matched_bare", "none"), ("fewshot_matched_critic", "none"), ("fewshot_k1", "none")]
+POOLED_PAIRS = TRANSFER_PAIRS[:3] + [("critic_only", "fewshot_matched_critic")] + TRANSFER_PAIRS[4:5] + TRANSFER_PAIRS[3:4] + TRANSFER_PAIRS[5:]
+
+
+def analyze_transfer(run_dir: Path, cfg: dict | None = None) -> dict:
+    rng = np.random.default_rng(int(_cfg(cfg)["analysis"]["transfer_seed"]))
     troot = run_dir / "transfer"
     out: dict = {}
     if not troot.exists():
@@ -306,10 +325,7 @@ def analyze_transfer(run_dir: Path) -> dict:
                                  "per_draw": {d: float(np.mean([r["honest"] for r in rows if r["draw"] == d]))
                                               for d in sorted({r["draw"] for r in rows})}}
                 diffs = {}
-                pairs = [("history_bare", "fewshot_matched_bare"), ("history_critic", "fewshot_matched_critic"),
-                         ("critic_only", "none"), ("history_bare", "none"), ("history_critic", "none"),
-                         ("fewshot_matched_bare", "none"), ("fewshot_matched_critic", "none"), ("fewshot_k1", "none")]
-                for a, b_ in pairs:
+                for a, b_ in TRANSFER_PAIRS:
                     if a in arms and b_ in arms:
                         bs = np.array([stat(arms[a], w) - stat(arms[b_], w) for w in ws])
                         diffs[f"{a}-{b_}"] = {"diff": stat(arms[a]) - stat(arms[b_]),
@@ -348,9 +364,7 @@ def pooled_bootstrap(cdir: Path, rng: np.random.Generator) -> dict:
     for arm, rows in rows_by_arm.items():
         b = np.array([stat(rows, w) for w in ws])
         out["arms"][arm] = {"n": len(rows), "honest": stat(rows), "lo": float(np.percentile(b, 2.5)), "hi": float(np.percentile(b, 97.5))}
-    for a, b_ in [("history_bare", "fewshot_matched_bare"), ("history_critic", "fewshot_matched_critic"),
-                  ("critic_only", "none"), ("critic_only", "fewshot_matched_critic"), ("history_critic", "none"),
-                  ("history_bare", "none"), ("fewshot_matched_bare", "none"), ("fewshot_matched_critic", "none"), ("fewshot_k1", "none")]:
+    for a, b_ in POOLED_PAIRS:
         if a in rows_by_arm and b_ in rows_by_arm:
             # paired over the cells both arms were run in (a context arm can be missing from a cell when its pool was
             # empty); `none` has no source mode (cells none__Y), so pairs with it are matched on the target mode Y
@@ -384,7 +398,7 @@ def pool_cells(cells: dict) -> dict:
 # Correlation
 # --------------------------------------------------------------------------
 
-def score_table(arm_data: dict[str, dict[str, ArmData]], n_q_by_model: dict[str, int]) -> dict:
+def score_table(arm_data: dict[str, dict[str, ArmData]]) -> dict:
     """Per model: 3A scores at attempt N (+ independent@1 as the stated-eval replica)."""
     rows = {}
     for model, arms in arm_data.items():
@@ -410,7 +424,8 @@ def pearson(x, y):
 
 
 def spearman(x, y):
-    rank = lambda v: np.argsort(np.argsort(v)).astype(float)
+    def rank(v):
+        return np.argsort(np.argsort(v)).astype(float)
     return pearson(rank(np.asarray(x)), rank(np.asarray(y)))
 
 
@@ -418,7 +433,8 @@ def correlate(xs: dict[str, float], ys: dict[str, float], rng: np.random.Generat
     models = sorted(m for m in xs if m in ys and not (np.isnan(xs[m]) or np.isnan(ys[m])))
     if len(models) < 3:
         return {"n": len(models), "models": models}
-    x = np.array([xs[m] for m in models]); y = np.array([ys[m] for m in models])
+    x = np.array([xs[m] for m in models])
+    y = np.array([ys[m] for m in models])
     boots = []
     for _ in range(N_BOOT):
         idx = rng.integers(0, len(models), len(models))
@@ -464,9 +480,8 @@ def split_half(arm_data: dict[str, dict[str, ArmData]], score: str, rng: np.rand
 def owning_eval_compliance(entry: dict) -> dict | None:
     """Strict + honest compliance on the owning experiment's final stated eval
     (test split, 9 training modes) if its result JSON exists."""
-    from retry_correlate import owning_eval_results
     best = None
-    for p in owning_eval_results(entry):
+    for p in corr_lib.owning_eval_results(entry):
         try:
             d = json.loads(p.read_text())
         except (OSError, json.JSONDecodeError) as e:
@@ -487,27 +502,22 @@ def owning_eval_compliance(entry: dict) -> dict | None:
     return best
 
 
-HC_METRICS = ("constrained_success_honest", "constrained_success", "constrained_success_given_read",
-              "control_minus_constrained", "suppression_ratio", "control_success")
-HC_HALVES = ("suppression_ratio", "constrained_success")  # metrics with _half0/_half1 (episode parity) in the 3B summaries
-
-
-def hidden_constraint_scores() -> dict:
-    """3B scores: kaushik/hidden_constraint/runs/summary.csv (the 3B analysis
+def hidden_constraint_scores(cfg: dict) -> dict:
+    """3B scores: <analysis.hidden_constraint_runs>/summary.csv (the 3B analysis
     table; primary) plus heldout_*/summary.json for runs that landed after the
     CSV was last written (the two agree to the CSV's 4-decimal rounding).
     Returns {model_key: {"3B:<metric>": mean over scenarios, "3B:<metric>:<scenario>": value, ...},
     "_source": {model_key: file}}. model_key = our label for base models
     (gptoss20b, qwen8b, gptoss120b; the "_api" variants are separate keys) or
     the registry run_name for "ckpt_<run_name>" checkpoints."""
-    root = RUNS.parents[1] / "hidden_constraint" / "runs"
+    an = cfg["analysis"]
+    root = ROOT / an["hidden_constraint_runs"]
     out: dict = {"_files": [], "_source": {}}
     if not root.exists():
         return out
-    wanted = set(HC_METRICS) | {f"{m}_half{h}" for m in HC_HALVES for h in (0, 1)}
+    wanted = set(an["hc_metrics"]) | {f"{m}_half{h}" for m in an["hc_halves"] for h in (0, 1)}
     csv_path = root / "summary.csv"
     if csv_path.exists():
-        import csv
         with csv_path.open() as f:
             for r in csv.DictReader(f):
                 if r["metric"] not in wanted:
@@ -529,7 +539,7 @@ def hidden_constraint_scores() -> dict:
         if d.get("slice") != "heldout" or not d.get("scenarios"):
             continue
         dirname = p.parent.name.removeprefix("heldout_")
-        # checkpoint runs are named heldout_ckpt_<registry run_name> (their model_label is the generic "modal_adapter")
+        # checkpoint runs are named heldout_ckpt_<registry run_name>
         key = dirname.removeprefix("ckpt_") if dirname.startswith("ckpt_") else str(d.get("model_label") or dirname)
         if out["_source"].get(key) == csv_path.name:
             continue
@@ -562,8 +572,21 @@ def split_half_3b(hc: dict, metric: str, models: list[str] | None = None) -> dic
     return {"n_models": len(ms), "half_r": r, "spearman_brown": 2 * r / (1 + r) if r > -1 else float("nan")}
 
 
-def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int) -> dict:
-    rng = np.random.default_rng(2)
+def primary_pairs(cfg: dict) -> list[str]:
+    """The pairs reported in results.md / plotted (every pair is in results.json). x = standard-eval
+    compliance: independent_strict@1 is an exact stated-eval replica on the same backend and items for
+    every model; the "mixed" x is the pinned T=1 strict compliance (pinned_reeval, OpenRouter) for base
+    models and the owning experiment's final stated test eval for checkpoints. 3B scores are mean over
+    the 3 scenarios."""
+    an = cfg["analysis"]
+    return [f"{y} vs {x}" for x in an["primary_x"] for y in an["primary_y"]] + \
+           [f"{y} vs 3A {x}" for y in an["primary_3b_y"] for x in an["primary_3b_x"]]
+
+
+def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int, cfg: dict | None = None) -> dict:
+    cfg = _cfg(cfg)
+    an = cfg["analysis"]
+    rng = np.random.default_rng(int(an["correlation_seed"]))
     arm_data: dict[str, dict[str, ArmData]] = {}
     xs: dict[str, dict[str, float]] = {"pinned_t1_strict": {}, "owning_eval_strict": {}, "owning_eval_honest": {},
                                        "standard_eval_strict_mixed": {}}
@@ -572,7 +595,8 @@ def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int) -> dict:
     # reduced 3A on the checkpoint item set (test split, 1 seeded mode per question, 500 items). Both are seeded
     # samples of the same test (question, mode) population; their overlap (~100 items) is too small to use alone.
     sub = run_subset(main_run)
-    for lb, mcfg in MODELS.items():
+    base_ids = {lb: m for lb, m in cfg["models"].items()}
+    for lb, mcfg in base_ids.items():
         mdir = main_run / lb
         if not mdir.exists():
             continue
@@ -584,19 +608,18 @@ def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int) -> dict:
         arms = {k: v for k, v in arms.items() if len(v.ids)}
         if arms:
             arm_data[lb] = arms
-            meta[lb] = {"kind": "base", "model": mcfg["model"], "items": "main subset",
+            meta[lb] = {"kind": "base", "model": corr_lib.rc.model_spec(lb)["base_model"], "items": "main subset",
                         "n_items": max(len(v.ids) for v in arms.values())}
             if mcfg.get("pinned_t1_strict"):
                 xs["pinned_t1_strict"][lb] = mcfg["pinned_t1_strict"]["test"]
                 xs["standard_eval_strict_mixed"][lb] = mcfg["pinned_t1_strict"]["test"]
     if ckpt_run and ckpt_run.exists():
-        from retry_correlate import ckpt_results
-        for r in ckpt_results(ckpt_run.name):
+        for r in corr_lib.ckpt_results(ckpt_run):
             qindex = {}
-            sub = next((p for p in r["dir"].iterdir() if p.is_dir() and p.name in MODELS), None)
-            if sub is None:
+            sub_dir = next((p for p in r["dir"].iterdir() if p.is_dir() and p.name in cfg["models"]), None)
+            if sub_dir is None:
                 continue
-            arms = {a.name: load_arm(a, qindex, n) for a in sorted(sub.iterdir()) if a.is_dir()}
+            arms = {a.name: load_arm(a, qindex, n) for a in sorted(sub_dir.iterdir()) if a.is_dir()}
             arms = {k: v for k, v in arms.items() if v is not None and len(v.ids)}
             if not arms:
                 continue
@@ -609,21 +632,21 @@ def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int) -> dict:
                 xs["owning_eval_honest"][r["run_name"]] = own["honest"]
                 xs["standard_eval_strict_mixed"][r["run_name"]] = own["strict"]
                 meta[r["run_name"]]["owning_eval"] = own
-    scores = score_table(arm_data, {})
+    scores = score_table(arm_data)
     # Broken adapters: standard-eval accuracy collapsed (e.g. gpt-oss-20b style_sft answers in pirate voice, which
-    # defeats ANSWER extraction; kaushik/fragility/results/exp1_summary.md). Flag acc@1 < 50% of the base model's.
+    # defeats ANSWER extraction; kaushik/fragility/results/exp1_summary.md). Flag acc@1 < broken_acc_frac of the base's.
     acc1 = {m: float(np.nanmean(arms["independent"].correct[:, 0])) for m, arms in arm_data.items() if "independent" in arms}
-    base_acc = {MODELS[lb]["model"].lower(): acc1[lb] for lb in acc1 if lb in MODELS}
+    base_acc = {meta[lb]["model"].lower(): acc1[lb] for lb in acc1 if lb in cfg["models"]}
     flagged = {}
     for m, info in meta.items():
         if info.get("kind") == "checkpoint" and m in acc1:
             ref = base_acc.get(str(info.get("base_model", "")).lower())
-            if ref and acc1[m] < 0.5 * ref:
+            if ref and acc1[m] < float(an["broken_acc_frac"]) * ref:
                 flagged[m] = {"acc1": acc1[m], "base_acc1": ref}
     for m, a in acc1.items():
         scores.setdefault(m, {})["acc@1"] = a
         meta.setdefault(m, {})["flagged_broken"] = m in flagged
-    hc = hidden_constraint_scores()
+    hc = hidden_constraint_scores(cfg)
     for m, r in hc.items():
         if m.startswith("_"):
             continue
@@ -655,26 +678,15 @@ def analyze_correlation(main_run: Path, ckpt_run: Path | None, n: int) -> dict:
                            {m: v for m, v in yv.items() if m in ckpts and m not in flagged}, rng)
             if c3.get("n", 0) >= 3:
                 corr_ckpt[f"{yname} vs {xname}"] = c3
-    reliability = {s: split_half(arm_data, s, rng) for s in ("bare@N", "block@N", "critic@N", "bare-independent@N", "block-block_once@N")
+    reps = int(an["split_half_reps"])
+    reliability = {s: split_half(arm_data, s, rng, reps) for s in ("bare@N", "block@N", "critic@N", "bare-independent@N", "block-block_once@N")
                    if any(s.split("@")[0].split("-")[0] in arms for arms in arm_data.values())}
     in_table = [m for m in scores if m in arm_data]
     reliability_3b = {f"3B:{m}": {"all_3B_models": split_half_3b(hc, m), "models_in_this_table": split_half_3b(hc, m, in_table)}
-                      for m in HC_HALVES}
+                      for m in an["hc_halves"]}
     return {"models": meta, "scores": scores, "x": xs, "correlations": corr, "correlations_unflagged": corr_unflagged,
             "correlations_checkpoints_only_unflagged": corr_ckpt, "flagged_broken": flagged, "split_half": reliability,
-            "split_half_3b": reliability_3b, "hidden_constraint": hc, "primary_pairs": PRIMARY_PAIRS}
-
-
-# The pairs reported in results.md / plotted (every pair is in results.json). x = standard-eval compliance:
-# independent_strict@1 is an exact stated-eval replica on the same backend and items for every model; the "mixed"
-# x is the pinned T=1 strict compliance (pinned_reeval, OpenRouter) for base models and the owning experiment's
-# final stated test eval for checkpoints. 3B scores are mean over the 3 scenarios.
-PRIMARY_PAIRS = [f"{y} vs {x}" for x in ("independent_strict@1", "standard_eval_strict_mixed")
-                 for y in ("bare@N", "bare-independent@N", "block@N", "block-block_once@N", "critic@N", "bare_trace@N",
-                           "3B:suppression_ratio:config_notation", "3B:suppression_ratio", "3B:constrained_success_given_read",
-                           "3B:constrained_success_honest")] + [
-    f"{y} vs 3A {x}" for y in ("3B:suppression_ratio:config_notation", "3B:suppression_ratio", "3B:constrained_success_given_read")
-    for x in ("bare@N", "bare-independent@N", "block@N")]
+            "split_half_3b": reliability_3b, "hidden_constraint": hc, "primary_pairs": primary_pairs(cfg)}
 
 
 # --------------------------------------------------------------------------
@@ -706,7 +718,9 @@ def plot_curves(res3a: dict, fig_dir: Path, n: int) -> list[str]:
         axes[0].legend(fontsize=8)
         fig.tight_layout()
         f = fig_dir / f"{model}_curves.png"
-        fig.savefig(f, dpi=130); plt.close(fig); files.append(f.name)
+        fig.savefig(f, dpi=130)
+        plt.close(fig)
+        files.append(f.name)
         modes = sorted({m for s in r["arms"].values() for m in s["per_mode"]})
         if modes:
             cols = 3
@@ -724,17 +738,19 @@ def plot_curves(res3a: dict, fig_dir: Path, n: int) -> list[str]:
             fig.suptitle(f"{model}: cumulative honest compliance by mode")
             fig.tight_layout()
             f = fig_dir / f"{model}_curves_by_mode.png"
-            fig.savefig(f, dpi=120); plt.close(fig); files.append(f.name)
+            fig.savefig(f, dpi=120)
+            plt.close(fig)
+            files.append(f.name)
     return files
 
 
-def plot_correlations(corr: dict, fig_dir: Path, scores: dict, xs: dict) -> list[str]:
+def plot_correlations(corr: dict, fig_dir: Path, pairs: list[str]) -> list[str]:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     files = []
     for key, c in corr.items():
-        if "x" not in c or key not in PRIMARY_PAIRS:
+        if "x" not in c or key not in pairs:
             continue
         yname, xname = key.split(" vs ")
         fig, ax = plt.subplots(figsize=(5.5, 4.5))
@@ -745,50 +761,54 @@ def plot_correlations(corr: dict, fig_dir: Path, scores: dict, xs: dict) -> list
                title=f"r={c['pearson']:.2f} [{c['pearson_lo']:.2f}, {c['pearson_hi']:.2f}], rho={c['spearman']:.2f}, n={c['n']}")
         fig.tight_layout()
         f = fig_dir / f"corr_{yname}_vs_{xname}.png".replace("@", "_at_").replace(" ", "")
-        fig.savefig(f, dpi=130); plt.close(fig); files.append(f.name)
+        fig.savefig(f, dpi=130)
+        plt.close(fig)
+        files.append(f.name)
     return files
 
 
 def pct(x, lo=None, hi=None) -> str:
-    if x is None or (isinstance(x, float) and np.isnan(x)):
-        return "-"
-    s = f"{100 * x:.1f}"
-    return s if lo is None else f"{s} [{100 * lo:.1f}, {100 * hi:.1f}]"
+    s = st.pct(x)
+    return s if lo is None or s == "-" else f"{s} [{100 * lo:.1f}, {100 * hi:.1f}]"
 
 
 def num(x) -> str:
     return "-" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:.0f}"
 
 
-def report(run_dir: Path, res3a: dict, trans: dict, corr: dict | None, n: int, figs: list[str]) -> str:
+def report(run_dir: Path, res3a: dict, trans: dict, corr: dict | None, n: int, figs: list[str], cfg: dict | None = None) -> str:
+    ks = [k for k in REPORT_KS if k <= n]
     L = [f"# Results: {run_dir.name}", "",
          ("Honest compliance = strict grader passes, an answer is extracted, trace not truncated/short/repetitive "
           "(`cotcontrol.eval.grading.is_honest`). Intervals: 95% bootstrap over questions, paired across arms."), ""]
     for model, r in res3a.items():
         L += [f"## 3A: {model}", "", "Items per arm: " + ", ".join(f"{a}={s['n_items']}" for a, s in r["arms"].items()), "",
-              f"Long-trace reference (attempt-1 median chars of the independent arm): {next(iter(r['arms'].values()))['long_ref_chars']:.0f}", "",
-              "| arm | " + " | ".join(f"k={k}" for k in REPORT_KS if k <= n) + " | honest&long@N | strict@1 | strict@N | acc on compliant@N | acc@1 | chars@1 | chars@N | chars of compliant attempt | degen@1 | degen@N | trunc@N | mentions constraint (k=1 / k>1) | mentions feedback (k>1) |",
-              "|---|" + "---|" * (len([k for k in REPORT_KS if k <= n]) + 13)]
+              f"Long-trace reference (attempt-1 median chars of the independent arm): {next(iter(r['arms'].values()))['long_ref_chars']:.0f}", ""]
+        rows = []
         for arm, s in r["arms"].items():
-            cells = [pct(s["cum_honest"][k - 1], s["cum_honest_lo"][k - 1], s["cum_honest_hi"][k - 1]) for k in REPORT_KS if k <= n]
             me = s.get("mentions") or {}
-            L.append(f"| {arm} | " + " | ".join(cells) + f" | {pct(s['cum_honest_long'][-1], s['cum_honest_long_lo'][-1], s['cum_honest_long_hi'][-1])} | {pct(s['cum_strict'][0])} | {pct(s['cum_strict'][-1])} | "
-                     f"{pct(s['acc_on_compliant'][-1])} | {pct(s['acc_attempt'][0])} | {num(s['chars'][0])} | "
-                     f"{num(s['chars'][-1])} | {num(s['chars_on_compliant'])} | {pct(s['degen'][0])} | {pct(s['degen'][-1])} | {pct(s['truncated'][-1])} | "
-                     f"{pct(me.get('constraint_attempt1'))} / {pct(me.get('constraint_later'))} | {pct(me.get('feedback_later'))} |")
-        L += ["", "Differences at attempt N (cumulative honest, points):", "", "| comparison | " + " | ".join(f"k={k}" for k in REPORT_KS if k <= n) + " | beats baseline at N (CI > 0) | honest&long diff@N | beats (long) |", "|---|" + "---|" * (len([k for k in REPORT_KS if k <= n]) + 3)]
-        for name, d in r["diffs"].items():
-            cells = [pct(d["diff"][k - 1], d["lo"][k - 1], d["hi"][k - 1]) for k in REPORT_KS if k <= n]
-            L.append(f"| {name} | " + " | ".join(cells) + f" | {'yes' if d['beats_baseline_at_N'] else 'no'} (P(diff<=0)={d['p_le_0_at_N']:.3f}) | "
-                     f"{pct(d['diff_long'][-1], d['long_lo'][-1], d['long_hi'][-1])} | {'yes' if d['beats_baseline_long_at_N'] else 'no'} |")
-        L += ["", "Per mode, cumulative honest at k=1 / k=N:", "", "| mode | " + " | ".join(r["arms"]) + " |", "|---|" + "---|" * len(r["arms"])]
+            rows.append([arm, *[pct(s["cum_honest"][k - 1], s["cum_honest_lo"][k - 1], s["cum_honest_hi"][k - 1]) for k in ks],
+                         pct(s["cum_honest_long"][-1], s["cum_honest_long_lo"][-1], s["cum_honest_long_hi"][-1]),
+                         pct(s["cum_strict"][0]), pct(s["cum_strict"][-1]), pct(s["acc_on_compliant"][-1]), pct(s["acc_attempt"][0]),
+                         num(s["chars"][0]), num(s["chars"][-1]), num(s["chars_on_compliant"]), pct(s["degen"][0]), pct(s["degen"][-1]),
+                         pct(s["truncated"][-1]), f"{pct(me.get('constraint_attempt1'))} / {pct(me.get('constraint_later'))}",
+                         pct(me.get("feedback_later"))])
+        L += [st.md_table(["arm", *[f"k={k}" for k in ks], "honest&long@N", "strict@1", "strict@N", "acc on compliant@N", "acc@1",
+                           "chars@1", "chars@N", "chars of compliant attempt", "degen@1", "degen@N", "trunc@N",
+                           "mentions constraint (k=1 / k>1)", "mentions feedback (k>1)"], rows),
+              "", "Differences at attempt N (cumulative honest, points):", ""]
+        rows = [[name, *[pct(d["diff"][k - 1], d["lo"][k - 1], d["hi"][k - 1]) for k in ks],
+                 f"{'yes' if d['beats_baseline_at_N'] else 'no'} (P(diff<=0)={d['p_le_0_at_N']:.3f})",
+                 pct(d["diff_long"][-1], d["long_lo"][-1], d["long_hi"][-1]), "yes" if d["beats_baseline_long_at_N"] else "no"]
+                for name, d in r["diffs"].items()]
+        L += [st.md_table(["comparison", *[f"k={k}" for k in ks], "beats baseline at N (CI > 0)", "honest&long diff@N", "beats (long)"], rows),
+              "", "Per mode, cumulative honest at k=1 / k=N:", ""]
         modes = sorted({m for s in r["arms"].values() for m in s["per_mode"]})
-        for m in modes:
-            L.append(f"| {m} | " + " | ".join(
-                (pct(s["per_mode"][m]["cum_honest"][0]) + " / " + pct(s["per_mode"][m]["cum_honest"][-1])) if m in s["per_mode"] else "-"
-                for s in r["arms"].values()) + " |")
-        L.append("")
+        rows = [[m, *[(pct(s["per_mode"][m]["cum_honest"][0]) + " / " + pct(s["per_mode"][m]["cum_honest"][-1])) if m in s["per_mode"] else "-"
+                      for s in r["arms"].values()]] for m in modes]
+        L += [st.md_table(["mode", *r["arms"]], rows), ""]
     if trans:
+        models = _cfg(cfg)["models"]
         L += ["## 3A-transfer", ""]
         for model, mres in trans.items():
             L += [f"### {model}", ""]
@@ -798,7 +818,7 @@ def report(run_dir: Path, res3a: dict, trans: dict, corr: dict | None, n: int, f
                 for src, d in fr.items():
                     L.append(f"- {src}: " + ", ".join(f"{m} {v['eligible']}/{v['success']}/{v['episodes']}" for m, v in sorted(d.items())))
                 L.append("")
-            pins = MODELS.get(model, {})
+            pins = models.get(model, {})
             if pins.get("pinned_t1_fewshot_heldout") and "nine2heldout" in mres["configs"]:
                 fs = pins["pinned_t1_fewshot_heldout"]
                 L += [(f"Pinned T=1 held-out STRICT compliance (pinned_reeval, OpenRouter): baseline {pct(pins['pinned_t1_strict']['heldout'])}, "
@@ -809,17 +829,13 @@ def report(run_dir: Path, res3a: dict, trans: dict, corr: dict | None, n: int, f
                 L += [f"**{cname}** (pooled over cells and draws, bootstrap over {pb.get('n_questions', '?')} questions): "
                       + ", ".join(f"{a}={pct(v['honest'], v['lo'], v['hi'])}" for a, v in pb.get("arms", {}).items()), "",
                       "Pooled differences [CI]: " + "; ".join(f"{k}: {pct(v['diff'], v['lo'], v['hi'])}" for k, v in pb.get("diffs", {}).items()), "",
-                      "Cell-mean differences: " + "; ".join(f"{k}: {pct(v['mean'])} ({v['cells_positive']}/{v['n_cells']} cells > 0)" for k, v in c["pooled"]["diffs"].items()), "",
-                      "| cell | arm | n | honest [CI] | strict | acc | mentions constraint | per draw |", "|---|---|---|---|---|---|---|---|"]
-                for cell, cc in c["cells"].items():
-                    for arm, s in cc["arms"].items():
-                        L.append(f"| {cell} | {arm} | {s['n']} | {pct(s['honest'], s['lo'], s['hi'])} | {pct(s['strict'])} | {pct(s['acc'])} | "
-                                 f"{pct(s['mentions_constraint'])} | {', '.join(f'{d}:{pct(v)}' for d, v in s['per_draw'].items())} |")
-                L += ["", "| cell | comparison | diff [CI] |", "|---|---|---|"]
-                for cell, cc in c["cells"].items():
-                    for k, d in cc["diffs"].items():
-                        L.append(f"| {cell} | {k} | {pct(d['diff'], d['lo'], d['hi'])} |")
-                L.append("")
+                      "Cell-mean differences: " + "; ".join(f"{k}: {pct(v['mean'])} ({v['cells_positive']}/{v['n_cells']} cells > 0)" for k, v in c["pooled"]["diffs"].items()), ""]
+                rows = [[cell, arm, s["n"], pct(s["honest"], s["lo"], s["hi"]), pct(s["strict"]), pct(s["acc"]), pct(s["mentions_constraint"]),
+                         ", ".join(f"{d}:{pct(v)}" for d, v in s["per_draw"].items())]
+                        for cell, cc in c["cells"].items() for arm, s in cc["arms"].items()]
+                L += [st.md_table(["cell", "arm", "n", "honest [CI]", "strict", "acc", "mentions constraint", "per draw"], rows), ""]
+                rows = [[cell, k, pct(d["diff"], d["lo"], d["hi"])] for cell, cc in c["cells"].items() for k, d in cc["diffs"].items()]
+                L += [st.md_table(["cell", "comparison", "diff [CI]"], rows), ""]
     if corr:
         cols = ["acc@1", "independent_strict@1", "independent@N", "bare@N", "bare-independent@N", "block@N", "block_once@N",
                 "block-block_once@N", "critic@N", "bare_trace@N", "bare_long@N"]
@@ -834,70 +850,69 @@ def report(run_dir: Path, res3a: dict, trans: dict, corr: dict | None, n: int, f
                "replica (same backend and items, one sample); `std strict (mixed)` is the pinned T=1 strict compliance for base models "
                "(pinned_reeval, OpenRouter) and the owning experiment's final stated test eval for checkpoints. 3B = mean over its 3 "
                f"scenarios (hidden_constraint `summary.csv`, {sum(v == 'summary.csv' for v in hc.get('_source', {}).values())} models; "
-               f"newer runs from `heldout_*/summary.json`, {sum(v != 'summary.csv' for v in hc.get('_source', {}).values())} models)."), "",
-              "| model | kind | n items | flagged | std strict (mixed) | " + " | ".join(cols + hcols) + " |",
-              "|---|---|---|---|---|" + "---|" * (len(cols) + len(hcols))]
-        for m in rows:
-            r, info = corr["scores"][m], corr["models"].get(m, {})
-            L.append(f"| {m} | {info.get('kind', '?')} | {info.get('n_items', '-')} | {'BROKEN' if info.get('flagged_broken') else ''} | "
-                     f"{pct(corr['x']['standard_eval_strict_mixed'].get(m))} | " + " | ".join(pct(r.get(k)) for k in cols + hcols) + " |")
+               f"newer runs from `heldout_*/summary.json`, {sum(v != 'summary.csv' for v in hc.get('_source', {}).values())} models)."), ""]
+        trows = [[m, info.get("kind", "?"), info.get("n_items", "-"), "BROKEN" if info.get("flagged_broken") else "",
+                  pct(corr["x"]["standard_eval_strict_mixed"].get(m)), *[pct(r.get(k)) for k in cols + hcols]]
+                 for m in rows for r, info in [(corr["scores"][m], corr["models"].get(m, {}))]]
+        L += [st.md_table(["model", "kind", "n items", "flagged", "std strict (mixed)", *cols, *hcols], trows)]
         fl = corr.get("flagged_broken") or {}
         L += ["", "Flagged BROKEN adapters (accuracy at attempt 1 < 50% of the base model's): "
               + (", ".join(f"{m} (acc {100 * v['acc1']:.0f}% vs base {100 * v['base_acc1']:.0f}%)" for m, v in fl.items()) or "none"), "",
               ("Primary correlations: Pearson r [95% bootstrap over models], Spearman rho. `unflagged` drops the BROKEN adapters; "
-               "`ckpt only` additionally drops the base/API models. Every pair is in results.json (`correlation.correlations*`)."), "",
-              "| y vs x | n | r [CI] | rho | n unflagged | r [CI] | rho | n ckpt only | r [CI] | rho |", "|---|---|---|---|---|---|---|---|---|---|"]
+               "`ckpt only` additionally drops the base/API models. Every pair is in results.json (`correlation.correlations*`)."), ""]
 
         def fmt(c):
             if not c:
-                return "- | - | -"
-            ci = f" [{c['pearson_lo']:.2f}, {c['pearson_hi']:.2f}]" if c["n"] >= 5 else " (n<5, no CI)"
-            return f"{c['n']} | {c['pearson']:.2f}{ci} | {c['spearman']:.2f}"
+                return ["-", "-", "-"]
+            ci_ = f" [{c['pearson_lo']:.2f}, {c['pearson_hi']:.2f}]" if c["n"] >= 5 else " (n<5, no CI)"
+            return [c["n"], f"{c['pearson']:.2f}{ci_}", f"{c['spearman']:.2f}"]
+        prows = []
         for k in corr.get("primary_pairs", []):
             c = corr["correlations"].get(k)
             if not c:
                 continue
             u = (corr.get("correlations_unflagged") or {}).get(k) or (c if not fl else None)
-            L.append(f"| {k} | {fmt(c)} | {fmt(u)} | {fmt((corr.get('correlations_checkpoints_only_unflagged') or {}).get(k))} |")
-        L += ["", ("Split-half reliability across models (Spearman-Brown corrected). 3A: random question halves, 200 draws; "
-                   "3B: the 3B summaries' episode-parity halves (all 3B models / the models in the table above):"), "",
-              "| score | n models | half-half r [CI] | Spearman-Brown |", "|---|---|---|---|"]
-        for s, r in corr["split_half"].items():
-            if "half_r_mean" in r:
-                L.append(f"| {s} | {r['n_models']} | {r['half_r_mean']:.2f} [{r['half_r_lo']:.2f}, {r['half_r_hi']:.2f}] | {r['spearman_brown']:.2f} |")
+            prows.append([k, *fmt(c), *fmt(u), *fmt((corr.get("correlations_checkpoints_only_unflagged") or {}).get(k))])
+        L += [st.md_table(["y vs x", "n", "r [CI]", "rho", "n unflagged", "r [CI]", "rho", "n ckpt only", "r [CI]", "rho"], prows),
+              "", ("Split-half reliability across models (Spearman-Brown corrected). 3A: random question halves, 200 draws; "
+                   "3B: the 3B summaries' episode-parity halves (all 3B models / the models in the table above):"), ""]
+        srows = [[s, r["n_models"], f"{r['half_r_mean']:.2f} [{r['half_r_lo']:.2f}, {r['half_r_hi']:.2f}]", f"{r['spearman_brown']:.2f}"]
+                 for s, r in corr["split_half"].items() if "half_r_mean" in r]
         for s, r in (corr.get("split_half_3b") or {}).items():
             a, b = r["all_3B_models"], r["models_in_this_table"]
             if "half_r" in a:
-                L.append(f"| {s} (all / in table) | {a['n_models']} / {b.get('n_models', 0)} | {a['half_r']:.2f} / "
-                         + (f"{b['half_r']:.2f}" if "half_r" in b else "-") + f" | {a['spearman_brown']:.2f} / "
-                         + (f"{b['spearman_brown']:.2f}" if "spearman_brown" in b else "-") + " |")
-        L.append("")
+                srows.append([f"{s} (all / in table)", f"{a['n_models']} / {b.get('n_models', 0)}",
+                              f"{a['half_r']:.2f} / " + (f"{b['half_r']:.2f}" if "half_r" in b else "-"),
+                              f"{a['spearman_brown']:.2f} / " + (f"{b['spearman_brown']:.2f}" if "spearman_brown" in b else "-")])
+        L += [st.md_table(["score", "n models", "half-half r [CI]", "Spearman-Brown"], srows), ""]
     L += ["## Figures", ""] + [f"- figures/{f}" for f in figs]
     return "\n".join(L) + "\n"
 
 
-def main(argv: list[str]) -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", required=True)
+def main(cfg: dict, argv: list[str] | None = None) -> None:
+    global N_BOOT, DEGEN_CHARS, REPORT_KS
+    ap = argparse.ArgumentParser(prog="retry analyze", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ckpt-run", default="ckpt")
-    ap.add_argument("--transfer-run", default=None, help="run holding transfer/ (default: --run)")
-    ap.add_argument("--n-attempts", type=int, default=CFG["n_attempts"])
+    ap.add_argument("--transfer-run", default=None, help="run holding transfer/ (default: the config's run)")
     ap.add_argument("--no-corr", action="store_true")
     a = ap.parse_args(argv)
-    run_dir = RUNS / a.run
+    an = cfg["analysis"]
+    N_BOOT, DEGEN_CHARS, REPORT_KS = int(an["bootstrap_draws"]), int(an["degen_chars"]), tuple(an["report_ks"])
+    n = int(cfg["n_attempts"])
+    run_dir = RUNS / str(cfg["run"])
     fig_dir = run_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    res3a = analyze_3a(run_dir, a.n_attempts)
-    trans = analyze_transfer(RUNS / (a.transfer_run or a.run))
-    corr = None if a.no_corr else analyze_correlation(run_dir, RUNS / a.ckpt_run, a.n_attempts)
-    figs = plot_curves(res3a, fig_dir, a.n_attempts)
+    res3a = analyze_3a(run_dir, n, cfg=cfg)
+    trans = analyze_transfer(RUNS / (a.transfer_run or str(cfg["run"])), cfg)
+    corr = None if a.no_corr else analyze_correlation(run_dir, RUNS / a.ckpt_run, n, cfg)
+    figs = plot_curves(res3a, fig_dir, n)
     if corr:
-        figs += plot_correlations(corr["correlations"], fig_dir, corr["scores"], corr["x"])
+        figs += plot_correlations(corr["correlations"], fig_dir, corr["primary_pairs"])
     (run_dir / "results.json").write_text(json.dumps({"3a": res3a, "transfer": trans, "correlation": corr}, indent=1, default=str))
-    md = report(run_dir, res3a, trans, corr, a.n_attempts, figs)
+    md = report(run_dir, res3a, trans, corr, n, figs, cfg)
     (run_dir / "results.md").write_text(md)
     print(md)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main(resolve(EXP), sys.argv[1:])

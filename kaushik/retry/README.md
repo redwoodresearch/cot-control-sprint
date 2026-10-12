@@ -5,8 +5,11 @@ elicit CoT control beyond what extra samples give, does what a model picks up fr
 other constraints, and do these scores track the standard (instruction-following) eval?
 
 ```
-.venv/bin/python kaushik/run.py retry <stage>     # check | power | pilot | run | transfer | registry | analyze | status | gpus
+.venv/bin/python kaushik/run.py retry <job> [key=value ...]   # run3a | transfer | ckpt | analyze | prune | progress | subset | check
+.venv/bin/python kaushik/run.py sweep retry/sweeps/<name>.yaml --dry-run   # main | pilot | smoke | transfer | ckpt
 ```
+Every setting is YAML (`config.yaml`, on top of `kaushik/config/defaults.yaml`; sweeps in `sweeps/`); migrated to
+`kaushik/core` on 2026-10-12 (see "Layout and migration" below).
 
 ## What runs
 
@@ -33,10 +36,11 @@ Errored generations are logged to `errors.jsonl` and the same attempt index is r
 Baselines: `bare`/`bare_trace`/`critic` vs `independent`; `block` vs `block_once`. An effect counts only
 above its baseline curve.
 
-**Models** (`configs/models.json`): gpt-oss-120b via OpenRouter (Groq, the pinned_reeval provider; T=1,
-top_p 1, 16k max tokens, effort medium), gpt-oss-20b (effort medium) and Qwen3-8B via Modal vLLM
-(H200, cache off so repeated identical prompts are independent samples), plus every trained adapter that
-appears in `../registry/` (served with its registry `eval_chat_template_kwargs`). Kimi K3 was dropped on
+**Models** (`config.yaml: models`, keyed by the model keys of `kaushik/config/defaults.yaml`, which supply the HF id,
+the reasoning-on template kwargs and the tensor parallelism): gpt-oss-120b via OpenRouter (Groq, the pinned_reeval
+provider from `configs/eval_pins.json`; T=1, top_p 1, 16k max tokens, effort medium), gpt-oss-20b (effort medium) and
+Qwen3-8B via Modal vLLM (H200, cache off so repeated identical prompts are independent samples), plus every trained
+adapter that appears in `../registry/` (served with its registry `eval_chat_template_kwargs`). Kimi K3 was dropped on
 2026-10-08 (cost); its pins stay in `configs/eval_pins.json` for `pinned_reeval/launch.py`.
 
 **Items.** Main run: test split, 500 questions x all valid training modes = 4464 items per arm at launch; at 13:05 (user decision) every remaining round and the whole analysis were restricted to ONE seeded, mode-stratified subset of 1000 items (`configs/main_subset.json` = `runs/main/subset.json`, seed 0, 111-112 per mode, sha256 `3fc5a6345c20087f58051d0df7ae1c5de7dd5799b62a2e8b43192a32e594aa49`), identical for every arm and model so comparisons stay paired; kept items keep their full attempt history. Power at n=1000: SE of one arm 1.6 pts, of an arm-vs-baseline difference 2.2 pts at p=.5 (<= 2 pts for p <= .35). The launch-time sizing was: 4464 items per arm (keyword modes
@@ -73,33 +77,38 @@ the split-half reliability (Spearman-Brown) of every 3A score. 3B scores are rea
 ## Reproduce
 
 ```bash
-.venv/bin/python kaushik/run.py retry check                                   # creds + model/endpoint availability
-.venv/bin/python kaushik/run.py retry power                                   # sample sizes
-.venv/bin/python kaushik/run.py retry pilot --run pilot                       # train split, all arms, all models
-.venv/bin/python kaushik/run.py retry run --run main                          # test split, all arms, all models
-.venv/bin/python kaushik/run.py retry transfer --run main --context-run pilot # 3A-transfer + few-shot k=1 rerun
-.venv/bin/python kaushik/run.py retry registry --run ckpt --hours 24          # trained adapters as they appear
-.venv/bin/python kaushik/run.py retry analyze --run main --ckpt-run ckpt      # results.md + figures/
-.venv/bin/python kaushik/run.py retry prune --run main [--apply]              # drop non-subset items from a FINISHED run (dry run by default)
-.venv/bin/python kaushik/run.py retry status --run main ; ... retry gpus      # progress; Modal container count
+R=".venv/bin/python kaushik/run.py"
+$R retry subset --power                                  # item counts and SEs of every item spec
+$R retry subset --write                                  # (re)write configs/main_subset.json (the 1000 main ids)
+$R sweep retry/sweeps/smoke.yaml --dry-run               # 4 items x 6 arms x 2 attempts, all backends
+$R sweep retry/sweeps/pilot.yaml --dry-run               # train split, 3 models x 6 arms (the transfer context pool)
+$R sweep retry/sweeps/main.yaml --dry-run                # test split (1000-item subset), 3 models x 6 arms
+$R sweep retry/sweeps/transfer.yaml --dry-run            # 3A-transfer + few-shot k=1 rerun, per model
+$R sweep retry/sweeps/ckpt.yaml --dry-run                # reduced 3A on every registry adapter (expands over the registry)
+$R retry ckpt run=ckpt items=checkpoint model=qwen8b     # ... or keep polling the registry for new adapters (24 h)
+$R retry analyze run=main [--ckpt-run ckpt]              # runs/main/results.{md,json} + figures/
+$R retry prune run=main [--apply]                        # drop non-subset items from a FINISHED run (dry run by default)
+$R retry progress run=main                               # items started / finished / honest per (model, arm)
+$R retry check                                           # config equivalence: every sweep point vs its run's manifest
 ```
 
-Modal GPU cap: `--gpus` (default 40 concurrent engine calls = GPUs, process-wide; live per-driver caps in `configs/gpu_caps.json`, whose sum
-is the coordinator's limit). Before starting a new driver: workspace containers <= 800 (`modal container list`) and laptop free memory >= 25%.
+Without `--dry-run` a sweep writes nothing but its scheduler state and launches the jobs that are not done yet;
+every sweep above reports its runs as already done.
 
-Operational notes (all in `retry_common.py`):
-- **Deployed mode.** `kaushik/run.py` sets `COTCONTROL_MODAL_INFERENCE_APP`, so drivers call the deployed
-  `cot-control-sprint_kaushik-reddy_inference` app and open no ephemeral app (the workspace allows 100 across all users).
-- **GPU caps.** `patch_engine_pool` wraps `modal_vllm._engine_cls` so every engine pool gets a hard `max_containers`
-  and a 300 s scaledown (the stock engine keeps containers warm for 600 s, which let one driver hold 2x its budget in
-  idle GPUs). Live per-pool caps in `configs/gpu_caps.json` (`<run>/<label>`) are re-read on every call; each
-  driver publishes its in-flight count to `runs/_gpu_inflight/`, which `retry gpus` sums (the deployed app's
-  container count is shared by every agent and cannot be attributed).
+Operational notes:
+- **Scheduler.** GPU capacity is `kaushik/core/scheduler.py`'s: one Job per (model, arm) whose weight is the number
+  of engine calls it keeps in flight (ceil(items / shard) x tensor parallelism, at most `modal.max_gpus_per_job` = 12;
+  0 for OpenRouter), dispatched under the sweep's `max_gpus` (live override `runs/<run>/.gpu_cap`) with the
+  800-container and 25 %-free-memory guards. The per-driver `GpuBudget`, `configs/gpu_caps.json`, `runs/_gpu_inflight/`
+  and the `patch_engine_pool` container cap are gone; the engine's idle window is now 120 s in `cotcontrol`.
+- **Deployed mode only.** `kaushik/run.py` sets `COTCONTROL_MODAL_INFERENCE_APP`, so drivers call the deployed
+  inference app and open no ephemeral app; `cotcontrol.inference.modal_vllm.generate_async` spawns each call and
+  re-attaches by id after client-side connection drops (the retry-specific spawn/poll code was removed).
 - **Lossless restarts.** Every finished generation shard is written to `runs/<run>/<model>/gen_cache/` keyed by
-  (arm, fingerprint of the active items' attempt indices, prompts); a restarted driver re-generates only the shards of
+  (arm, fingerprint of the active items' attempt indices, prompts); a restarted job re-generates only the shards of
   the interrupted round that had not finished, then resumes from `attempts.jsonl`.
-- **OpenRouter.** Requests go out in chunks of the pinned concurrency, at most `api_slots` (2) chunks in flight per
-  process: six arms at 100 each produced 2-3% of generations exhausting 8 retries on Groq 429s.
+- **OpenRouter.** Requests go out in chunks of the pinned concurrency, at most `openrouter.api_slots` (4) chunks in
+  flight per process and model: six arms at 100 each produced 2-3% of generations exhausting 8 retries on Groq 429s.
 - **Sampling seeds.** vLLM seeds its engine RNG deterministically, so fresh containers given identical batches sample
   identical text; every shard carries its own seed (derived from model, arm, round and shard index).
 
@@ -109,7 +118,38 @@ Operational notes (all in `retry_common.py`):
 judge outputs, feedback + critic prompt/output), `errors.jsonl`, `episodes.json`, `mentions.jsonl` (meta-discussion
 judge), `manifest.json` (git commit, dataset hash, pins, backend config, power statement), `log.txt`.
 `runs/<run>/transfer/<model>/<config>/<cell>/<arm>_d<draw>.{json,context.txt,meta.json}` (standard eval JSONs).
-`runs/<ckpt-run>/<registry run_name>/...` for adapters. `runs/<run>/results.md`, `results.json`, `figures/`.
+`runs/ckpt/<registry run_name>/<model>/<arm>/` for adapters (+ `done.json` once every arm finished).
+`runs/<run>/results.md`, `results.json`, `figures/`.
+
+## Layout and migration (`kaushik/core`, 2026-10-12)
+
+`config.yaml` holds every setting the old `configs/{retry,models,gpu_caps}.json` and the Python literals held (arms,
+attempts, sampling, judge, critic, feedback budget, item specs, transfer design, serving table, analysis draws / seeds);
+`sweeps/*.yaml` are the model x arm grids (one point = one `runs/<run>/<model>/<arm>` job; transfer per model; `ckpt`
+per base model, expanded over the registry by `ckpt.py:jobs`). Experiment code: `retry_arms.py` (arms),
+`retry_common.py` (items, backends, manifests), `run3a.py` (arm job), `retry_transfer.py` + `transfer.py`,
+`retry_correlate.py` + `ckpt.py`, `analyze.py`, `prune.py`, `progress.py`, `subset.py`, `check.py`, `tests/`.
+Deleted: `cli.py`, `retry_run3a.py`, `retry_prune.py`, the JSON configs, `GpuBudget`, `patch_engine_pool`,
+`spawn_generate`, `modal_app_context`, the `check` (credentials) and `gpus` stages. `configs/main_subset.json` stays:
+it is data (the 1000 ids the main run holds; `subset.py --write` regenerates it bit-for-bit).
+
+- Config equivalence (`run.py retry check`): all 101 existing manifests are reproduced (18 main, 18 pilot, 18 smoke,
+  3 transfer, 44 checkpoint arms). Explained differences, skipped by the check: `ModalGenerateConfig` gained
+  `scaledown_window` after the runs (cotcontrol d30c268); the gpt-oss-120b transfer ran with `api_slots` 2 before the
+  main launch raised it to 4; the smoke runs predate per-shard seeds and the per-model shard sizes (256 then,
+  192 / 96 now); the Modal transfer manifests recorded the config default `one2one_questions: 200` next to the
+  value used (100), which the new config carries directly. Qwen3-8B keeps `chat_template_kwargs: null` (the template
+  default, = thinking on) because that is what the manifests record.
+- Analysis equivalence: `runs/pilot/results.md` is byte-identical after `analyze run=pilot --no-corr`;
+  `runs/main/results.md` is byte-identical after `analyze run=main` when given the inputs the committed file was
+  built from (the 3 `fragility-*` checkpoint runs finished by then and the 3B `summary.csv` of that time); the
+  file now on disk additionally folds in the two `cpt-gptoss20b-r32-seed0*` checkpoints that finished at 15:51 /
+  15:57 on 2026-10-08 and reads every 3B score from the regenerated `summary.csv` (same values to 4 decimals). The
+  3A and transfer sections are byte-identical in both cases. `results.json` gains the 3B `hits_diff` / `clean_rate`
+  correlations (not in `results.md`).
+- The weighted question bootstrap of the curves (`boot_weights` / `cum_curve`) stays here: the committed intervals
+  depend on its draw order and `kaushik.core.stats` has no weighted-curve resampler; formatting and tables come
+  from `core.stats`.
 
 **Pruned main run (2026-10-08 15:25).** The main run started 4464 items per arm and was restricted to the 1000-item subset mid-run,
 so after every arm finished `retry prune --run main --apply` removed every record of a non-subset item from

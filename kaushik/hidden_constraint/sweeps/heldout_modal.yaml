@@ -1,0 +1,13 @@
+# Held-out slice, Modal vLLM base models (same serving path as the trained checkpoints): 5 lockstep
+# groups = 5 concurrent engine containers (GPUs) per run under the 25-GPU cap (coordinator, 2026-10-08).
+experiment: hidden_constraint
+job: run
+run_name: "{slice}_{model}"
+overrides:
+  groups: 5
+axes:
+  - [{_label: {slice: heldout}, slice: heldout}]
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+    - {_label: {model: qwen36_27b}, model: qwen36_27b}
+max_gpus: 25

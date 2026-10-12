@@ -1,0 +1,102 @@
+# Experiment 3A (retry under feedback), 3A-transfer and the Experiment 3 correlation. Evaluation only.
+# One sweep point = one (run group, model, arm) retry job -> runs/<run>/<model>/<arm>/ (sweeps/main.yaml,
+# pilot.yaml, smoke.yaml); transfer points are per model (sweeps/transfer.yaml -> runs/<run>/transfer/<model>/);
+# checkpoint points are per base model and expand over kaushik/registry (sweeps/ckpt.yaml ->
+# runs/ckpt/<registry run_name>/<model>/<arm>/). Jobs: run3a.py, transfer.py, ckpt.py, analyze.py, prune.py,
+# progress.py, subset.py, check.py.
+run: main                  # run group under runs/
+run_dir: "kaushik/retry/runs/{run_name}"
+arm: null                  # set per sweep point (one of `arms`)
+arms: [block, bare, bare_trace, critic, independent, block_once]   # analysis order; feedback arms first
+checkpoint_arms: [bare, independent, block, block_once]            # the reduced 3A run on trained adapters
+n_attempts: 10
+sampling: {temperature: 1.0, top_p: 1.0, max_tokens: 16000}
+judge: {model: openai/gpt-5-mini, temperature: 1.0, max_tokens: 10000, concurrency: 200, max_retries: 8}
+critic: {model: openai/gpt-5-mini, provider: openai}   # IRPAIF critic (cotcontrol.eval.critic)
+max_feedback_chars: 30000  # bare_trace: oldest quoted traces are middle-truncated past this budget
+max_error_retries: 10      # per item: an errored generation re-runs the same attempt index
+
+items: main                # which of `item_specs` this run uses
+item_specs:
+  main: {split: test, modes_per_question: 9, seed: 0, subset: configs/main_subset.json}   # 1000-item subset (user, 2026-10-08 13:05)
+  pilot: {split: train, modes_per_question: 9, max_questions: 60, subsample_seed: 0, seed: 0}   # 538 items
+  checkpoint: {split: test, modes_per_question: 1, seed: 0}                                    # 500 items
+  smoke: {split: train, modes_per_question: 2, max_questions: 2, subsample_seed: 0, seed: 0}   # 4 items
+subset: {n: 1000, seed: 0, out: configs/main_subset.json}   # subset.py: seeded, mode-stratified ids of item_specs.main
+
+openrouter:
+  pins: configs/eval_pins.json   # per-model provider / concurrency / effort pins (repo root; pinned_reeval)
+  api_slots: 4                   # chunks of the pinned concurrency in flight per process (Groq 429s above that)
+modal:
+  shard: 256                     # prompts per engine call (per-model override below); one call = one GPU
+  shard_chars: 1500000           # and at most this much prompt text per call (client gRPC deadline)
+  max_num_seqs: 256
+  max_model_len: 32768
+  max_gpus_per_job: 12           # concurrent engine calls one scheduler job may hold (its weight)
+
+transfer:                        # 3A-transfer (retry_transfer.py): pilot episodes as system-prompt context
+  context_run: pilot             # train split, so no test item is ever in context
+  configs: [nine2heldout, one2one]
+  one2one_modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence, meow_between_words]
+  one2one_questions: 200         # test questions per one-to-one cell (100 for the Modal models: sweeps/transfer.yaml)
+  one2one_subsample_seed: 0
+  draws: 3                       # draws of which episode serves as context
+  arms: [none, fewshot_matched_bare, fewshot_matched_critic, history_bare, history_critic, critic_only]
+  api_parallel: 3                # concurrent OpenRouter evals
+  fewshot_prompts: fewshot/final_prompts   # the repo's pinned few-shot k=1 prompts (<label>/k1_s<draw>.txt)
+  max_questions: null            # smoke: cap every eval at N questions
+
+# Serving table keyed by the model key of kaushik/config/defaults.yaml (base_model, reasoning-on template
+# kwargs, tensor parallelism). OpenRouter models use the pins file; Modal models the deployed vLLM app.
+# pinned_t1_* are the standard-eval references for the correlation (pinned_reeval/results_t1.md).
+# Kimi K3 dropped on 2026-10-08 (cost); its pins stay in configs/eval_pins.json.
+models:
+  gptoss120b:
+    backend: openrouter
+    fewshot_label: gptoss120b
+    pinned_t1_strict: {test: 0.028, heldout: 0.047, source: pinned_reeval/results_t1.md baseline T=1}
+    pinned_t1_fewshot_heldout: {s1: 0.144, s2: 0.294, s3: 0.161, source: pinned_reeval/results_t1.md fewshot_s* heldout T1}
+  gptoss20b:
+    backend: modal
+    max_model_len: 65536
+    shard: 192
+    fewshot_label: gptoss20b
+    pinned_t1_strict: {test: 0.013, heldout: 0.009, source: pinned_reeval/results_t1.md baseline T=1 (OpenRouter groq)}
+    pinned_t1_fewshot_heldout: {s1: 0.042, s2: 0.045, s3: 0.046, source: pinned_reeval/results_t1.md fewshot_s* heldout T1}
+  qwen8b:
+    backend: modal
+    chat_template_kwargs: null   # historical: served with the template default (= thinking on); kept so manifests match
+    shard: 96
+    fewshot_label: qwen8b
+    pinned_t1_strict: {test: 0.013, heldout: 0.001, source: pinned_reeval/results_t1.md baseline T=1 (OpenRouter alibaba)}
+    pinned_t1_fewshot_heldout: {s1: 0.004, s2: 0.003, s3: 0.003, source: pinned_reeval/results_t1.md fewshot_s* heldout T1}
+  qwen36_27b:                    # Experiment 2 base model: registry checkpoints only, never a base-model 3A arm
+    backend: modal
+    chat_template_kwargs: null
+    shard: 64
+    checkpoints_only: true
+
+ckpt:                            # ckpt.py: registry adapters (reduced 3A, item_specs.checkpoint)
+  skip_pattern: smoke            # registry run_names matching this regex are ignored
+  poll_min: 10                   # rescan interval while polling
+  hours: 24                      # stop polling after this long
+  idle_hours: 6                  # ... or this long without a new entry (once everything is done)
+
+analysis:                        # analyze.py (bootstrap_seed 0 from defaults.yaml)
+  bootstrap_draws: 1000          # 3A curves, transfer and correlation bootstraps
+  report_ks: [1, 2, 3, 5, 10]
+  transfer_seed: 1
+  correlation_seed: 2
+  split_half_reps: 200
+  broken_acc_frac: 0.5           # checkpoint flagged BROKEN below this fraction of the base model's acc@1
+  hidden_constraint_runs: kaushik/hidden_constraint/runs   # 3B scores: summary.csv (+ heldout_*/summary.json)
+  hc_metrics: [constrained_success_honest, constrained_success, constrained_success_given_read,
+               control_minus_constrained, suppression_ratio, control_success, hits_diff, clean_rate]
+  hc_halves: [suppression_ratio, constrained_success, hits_diff]   # metrics with episode-parity halves
+  # Correlation pairs reported in results.md / plotted (every pair is in results.json).
+  primary_x: [independent_strict@1, standard_eval_strict_mixed]
+  primary_y: [bare@N, bare-independent@N, block@N, block-block_once@N, critic@N, bare_trace@N,
+              "3B:suppression_ratio:config_notation", "3B:suppression_ratio", "3B:constrained_success_given_read",
+              "3B:constrained_success_honest"]
+  primary_3b_y: ["3B:suppression_ratio:config_notation", "3B:suppression_ratio", "3B:constrained_success_given_read"]
+  primary_3b_x: [bare@N, bare-independent@N, block@N]

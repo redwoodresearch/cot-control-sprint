@@ -1,0 +1,9 @@
+# Held-out slice on every trained adapter in kaushik/registry/*.json (one point; poll.py:jobs expands it
+# into one run per non-smoke entry whose base model has a Modal entry in config.yaml:models) ->
+# runs/heldout_ckpt_<registry run_name>/. `run.py hidden_constraint poll` keeps rescanning for 24 h.
+experiment: hidden_constraint
+job: poll
+run_name: "{slice}_adapters"
+axes:
+  - [{_label: {slice: heldout}, slice: heldout}]
+max_gpus: 25

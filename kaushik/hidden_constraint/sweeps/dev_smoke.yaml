@@ -1,0 +1,12 @@
+# Dev-slice smoke runs (wording development; never reported): 5 episodes per scenario x condition on the
+# two local base models (runs/dev_<model>_smoke2). API copies: `run.py hidden_constraint run model=gptoss20b_api slice=dev n=3 tag=smoke2`.
+experiment: hidden_constraint
+job: run
+run_name: "{slice}_{model}_{tag}"
+overrides:
+  n: 5
+axes:
+  - [{_label: {slice: dev, tag: smoke2}, slice: dev}]
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+max_gpus: 8

@@ -1,5 +1,5 @@
 """3A-transfer: does what a model picks up from feedback on mode X carry to a
-mode Y it never got feedback on?
+mode Y it never got feedback on? (library + the `transfer` job; sweep: sweeps/transfer.yaml)
 
 Context = finished episodes from the pilot run (TRAIN split, so no test item
 ever appears as context), rendered as text in the system prompt in the
@@ -10,42 +10,39 @@ in what the context contains:
   history_<src>          the same episode's final attempt WITH its "Previous attempts" block
                          (every failed attempt's feedback), followed by the successful trace
   critic_only            the critic episode's feedback block, no successful trace
-  fewshot_k1             the repo's pinned few-shot k=1 prompts (fewshot/final_prompts), 3 seeds;
+  fewshot_k1             the repo's pinned few-shot k=1 prompts (transfer.fewshot_prompts), 3 seeds;
                          nine-to-held-out only, re-run on this backend as the matched comparison
 Configurations: one-to-one (single X episode, Y another training mode, X x Y
-matrix over CFG.transfer.one2one_modes, a seeded 200-question test subsample)
+matrix over transfer.one2one_modes, a seeded test subsample of transfer.one2one_questions)
 and nine-to-held-out (one episode per training mode, 3 held-out modes, full
-test split). 3 draws of which episode serves as context. Only episodes that
+test split). transfer.draws draws of which episode serves as context. Only episodes that
 succeeded after >= 2 attempts qualify (otherwise history == few-shot); the
 per-mode success fraction is reported since selection differs between arms.
 Contexts that name mode Y's rule are skipped (names_rule).
+
+Outputs: runs/<run>/transfer/<model>/manifest.json and <config>/<cell>/<arm>_d<draw>.{json,context.txt,meta.json}.
+One scheduler Job per (model, configuration); its evals run concurrently under the job's weight
+(Modal: modal.max_gpus_per_job engine calls; API: transfer.api_parallel evals).
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import random
 import re
+import sys
 from pathlib import Path
 
-from retry_common import (
-    CFG,
-    MODELS,
-    ROOT,
-    RUNS,
-    GpuBudget,
-    log_to,
-    make_generate_fn,
-    modal_app_context,
-    write_manifest,
-)
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from cotcontrol.eval.data import CONSTRAINT_MODES
-from cotcontrol.eval.eval import eval_cotcontrolqa
-from cotcontrol.eval.prompts import HELDOUT_MODES
 from cotcontrol.eval.retry import PREVIOUS_ATTEMPTS_HEADER, load_attempts
 from fewshot.build_final_prompts import SYSTEM_HEADER, render_answer
+from kaushik.core.scheduler import Job, run_scheduler
+from kaushik.retry import retry_common as rc
 
 RULE_PATTERNS = {  # text that names a mode's rule (used to scrub contexts for mode Y)
     "lowercase_thinking": r"lower-?\s?case",
@@ -163,52 +160,65 @@ def draw_episodes(pool: dict[str, list[list[dict]]], modes: list[str], draw: int
 # Jobs
 # --------------------------------------------------------------------------
 
-def build_jobs(model_label: str, context_run: str, configs: list[str], max_questions: int | None = None,
-               draws: int | None = None, one2one_questions: int | None = None) -> list[dict]:
+def context_dir(cfg: dict) -> Path:
+    """The pilot run's model dir supplying bare / critic episodes."""
+    return rc.RUNS / str(cfg["transfer"]["context_run"]) / cfg["model"]
+
+
+def transfer_dir(cfg: dict) -> Path:
+    return rc.run_dir_for(cfg, f"{cfg['run']}/transfer/{cfg['model']}")
+
+
+def build_jobs(cfg: dict, configs: list[str] | None = None) -> list[dict]:
     """Every (config, Y, arm, draw) eval of one model with its system prompt."""
-    mcfg = MODELS[model_label]
-    fam = family(mcfg["model"])
-    t = CFG["transfer"]
-    pools = {src: successful_episodes(RUNS / context_run / model_label / src / "attempts.jsonl")
-             for src in ("bare", "critic")}
+    from cotcontrol.eval.data import CONSTRAINT_MODES
+    from cotcontrol.eval.prompts import HELDOUT_MODES
+
+    t = cfg["transfer"]
+    configs = configs or list(t["configs"])
+    fam = family(cfg["base_model"])
+    pools = {src: successful_episodes(context_dir(cfg) / src / "attempts.jsonl") for src in ("bare", "critic")}
+    label = cfg["model"]
+    arms = [a for a in t["arms"] if a in ARM_SOURCE]
     jobs = []
 
     def add(config, y, arm, draw, system_prompt, meta, **eval_kw):
-        if max_questions:  # smoke tests: cap every eval at a seeded question subsample
-            eval_kw = {**eval_kw, "max_samples": max_questions, "subsample_seed": 0}
-        jobs.append({"model_label": model_label, "config": config, "y": y, "arm": arm, "draw": draw,
+        if t.get("max_questions"):  # smoke tests: cap every eval at a seeded question subsample
+            eval_kw = {**eval_kw, "max_samples": int(t["max_questions"]), "subsample_seed": 0}
+        jobs.append({"model_label": label, "config": config, "y": y, "arm": arm, "draw": draw,
                      "system_prompt": system_prompt, "meta": meta, "eval_kw": eval_kw})
 
-    for draw in range(draws or t["draws"]):
+    for draw in range(int(t["draws"])):
         if "nine2heldout" in configs:
             kw = {"mode": "all", "allowed_modes": HELDOUT_MODES}
             add("nine2heldout", "heldout", "none", draw, "", {}, **kw)
-            for arm, (src, kind) in ARM_SOURCE.items():
+            for arm in arms:
+                src, kind = ARM_SOURCE[arm]
                 try:
                     eps, order, skipped = draw_episodes(pools[src], CONSTRAINT_MODES, draw, HELDOUT_MODES, kind, fam)
                 except LookupError as e:
-                    print(f"[transfer] {model_label} nine2heldout {arm} d{draw}: {e}")
+                    print(f"[transfer] {label} nine2heldout {arm} d{draw}: {e}")
                     continue
                 add("nine2heldout", "heldout", arm, draw, render_context(eps, kind, fam),
                     {"source_arm": src, "kind": kind, "mode_order": order, "skipped_naming_rule": skipped,
                      "episodes": [[a["item_id"], len(ep)] for ep in eps for a in ep[:1]]}, **kw)
-            if mcfg.get("fewshot_label"):
-                p = ROOT / "fewshot" / "final_prompts" / mcfg["fewshot_label"] / f"k1_s{draw + 1}.txt"
+            if rc.serving(cfg).get("fewshot_label"):
+                p = ROOT / t["fewshot_prompts"] / rc.serving(cfg)["fewshot_label"] / f"k1_s{draw + 1}.txt"
                 add("nine2heldout", "heldout", "fewshot_k1", draw, p.read_text(), {"prompt_file": str(p)}, **kw)
         if "one2one" in configs:
-            modes = t["one2one_modes"]
+            modes = list(t["one2one_modes"])
             for y in modes:
-                kw = {"mode": y, "max_samples": one2one_questions or t["one2one_questions"],
-                      "subsample_seed": t["one2one_subsample_seed"]}
+                kw = {"mode": y, "max_samples": int(t["one2one_questions"]), "subsample_seed": int(t["one2one_subsample_seed"])}
                 add("one2one", y, "none", draw, "", {"x": None}, **kw)
                 for x in modes:
                     if x == y:
                         continue
-                    for arm, (src, kind) in ARM_SOURCE.items():
+                    for arm in arms:
+                        src, kind = ARM_SOURCE[arm]
                         try:
                             eps, _, skipped = draw_episodes(pools[src], [x], draw, [y], kind, fam)
                         except LookupError as e:
-                            print(f"[transfer] {model_label} one2one {x}->{y} {arm} d{draw}: {e}")
+                            print(f"[transfer] {label} one2one {x}->{y} {arm} d{draw}: {e}")
                             continue
                         add("one2one", y, arm, draw, render_context(eps, kind, fam),
                             {"x": x, "source_arm": src, "kind": kind, "skipped_naming_rule": skipped,
@@ -216,48 +226,28 @@ def build_jobs(model_label: str, context_run: str, configs: list[str], max_quest
     return jobs
 
 
-def job_dir(run_dir: Path, j: dict) -> Path:
+def job_dir(tdir: Path, j: dict) -> Path:
     cell = j["y"] if j["config"] == "nine2heldout" else f"{j['meta'].get('x') or 'none'}__{j['y']}"
-    return run_dir / "transfer" / j["model_label"] / j["config"] / cell
+    return tdir / j["config"] / cell
 
 
 def job_name(j: dict) -> str:
     return f"{j['arm']}_d{j['draw']}"
 
 
-async def run_transfer(run_name: str, labels: list[str], context_run: str, configs: list[str],
-                       gpu_cap: int | None = None, api_parallel: int = 3, max_questions: int | None = None,
-                       draws: int | None = None, one2one_questions: int | None = None) -> None:
-    run_dir = RUNS / run_name
-    log = log_to(run_dir / "transfer" / "log.txt")
-    m = CFG["modal"]
-    modal_labels = [lb for lb in labels if MODELS[lb]["backend"] == "modal"]
-    per_pool = max(1, (gpu_cap or m["gpu_cap"]) // max(1, len(modal_labels)))
-    api_sem = asyncio.Semaphore(api_parallel)
-    needs_modal = bool(modal_labels)
-    tasks = []
-    for lb in labels:
-        mcfg = MODELS[lb]
-        budget = GpuBudget(per_pool, None, m["gpu_cap_after_hours"], name=f"{run_name}/transfer/{lb}")
-        gen_fn, info = make_generate_fn(mcfg, budget, hard_cap=per_pool)
-        jobs = build_jobs(lb, context_run, configs, max_questions, draws, one2one_questions)
-        fr = {src: success_fractions(RUNS / context_run / lb / src / "attempts.jsonl") for src in ("bare", "critic")}
-        write_manifest(run_dir / "transfer" / lb / "manifest.json", run=run_name, context_run=context_run,
-                       model=mcfg["model"], configs=configs, n_jobs=len(jobs), backend=info,
-                       transfer_config={**CFG["transfer"], "one2one_questions_used": one2one_questions or CFG["transfer"]["one2one_questions"],
-                                        "draws_used": draws or CFG["transfer"]["draws"]}, context_success_fractions=fr,
-                       judge_model=CFG["judge_model"])
-        log(f"[{lb}] {len(jobs)} transfer evals; context pools (eligible/success/episodes per mode): "
-            + json.dumps({s: {k: (v['eligible'], v['success'], v['episodes']) for k, v in d.items()} for s, d in fr.items()}))
-        for j in jobs:
-            tasks.append(run_job(run_dir, mcfg, j, gen_fn, info, api_sem if mcfg["backend"] == "openrouter" else None, log))
-    async with modal_app_context(needs_modal, run_dir / "transfer" / "modal_app_id.txt"):
-        await asyncio.gather(*tasks)
-    log(f"transfer {run_name} done")
+def manifest_view(cfg: dict, n_jobs: int | None = None, backend_info: dict | None = None) -> dict:
+    t = cfg["transfer"]
+    fr = {src: success_fractions(context_dir(cfg) / src / "attempts.jsonl") for src in ("bare", "critic")}
+    return {"run": str(cfg["run"]), "context_run": str(t["context_run"]), "model": cfg["base_model"],
+            "configs": list(t["configs"]), "n_jobs": n_jobs, "backend": backend_info,
+            "transfer_config": {k: t[k] for k in ("one2one_modes", "one2one_questions", "one2one_subsample_seed", "draws", "arms")},
+            "context_success_fractions": fr, "judge_model": cfg["judge"]["model"]}
 
 
-async def run_job(run_dir: Path, mcfg: dict, j: dict, gen_fn, info: dict, sem, log) -> None:
-    out = job_dir(run_dir, j)
+async def run_job(cfg: dict, tdir: Path, j: dict, gen_fn, info: dict, sem, log) -> None:
+    from cotcontrol.eval.eval import eval_cotcontrolqa
+
+    out = job_dir(tdir, j)
     name = job_name(j)
     if (out / f"{name}.json").exists():
         return
@@ -267,9 +257,9 @@ async def run_job(run_dir: Path, mcfg: dict, j: dict, gen_fn, info: dict, sem, l
 
     async def go():
         await eval_cotcontrolqa(
-            model=mcfg["model"], system_prompt=j["system_prompt"], generate_fn=gen_fn,
+            model=cfg["base_model"], system_prompt=j["system_prompt"], generate_fn=gen_fn,
             save_dir=out, save_name=name, dataset="all", split="test", seed=0,
-            grade_meta_discussion=True, judge_model=CFG["judge_model"],
+            grade_meta_discussion=True, judge_model=cfg["judge"]["model"],
             backend_info={**info, "transfer": {k: j[k] for k in ("config", "y", "arm", "draw")}, **j["meta"]},
             **j["eval_kw"])
     log(f"start {j['model_label']} {j['config']} {j['y']} {name}")
@@ -279,3 +269,47 @@ async def run_job(run_dir: Path, mcfg: dict, j: dict, gen_fn, info: dict, sem, l
         async with sem:
             await go()
     log(f"done  {j['model_label']} {j['config']} {j['y']} {name}")
+
+
+async def run_config(cfg: dict, config: str, weight: int) -> None:
+    """Every eval of one configuration (nine2heldout | one2one) of one model, concurrently."""
+    tdir = transfer_dir(cfg)
+    log = rc.log_to(tdir.parent / "log.txt")
+    gen_fn, info = rc.make_generate_fn(cfg, weight or 1)
+    jobs = build_jobs(cfg, [config])
+    all_jobs = build_jobs(cfg)
+    rc.write_manifest(tdir / "manifest.json", **manifest_view(cfg, len(all_jobs), info))
+    fr = manifest_view(cfg)["context_success_fractions"]
+    log(f"[{cfg['model']}] {len(jobs)} {config} evals; context pools (eligible/success/episodes per mode): "
+        + json.dumps({s: {k: (v['eligible'], v['success'], v['episodes']) for k, v in d.items()} for s, d in fr.items()}))
+    sem = None if rc.is_modal(cfg) else asyncio.Semaphore(int(cfg["transfer"]["api_parallel"]))
+    await asyncio.gather(*[run_job(cfg, tdir, j, gen_fn, info, sem, log) for j in jobs])
+    log(f"transfer {cfg['run']} {cfg['model']} {config} done")
+
+
+def jobs(cfg: dict) -> list[Job]:
+    if not cfg.get("model"):
+        raise SystemExit("transfer needs a model: run.py retry transfer run=main model=gptoss120b")
+    tdir = transfer_dir(cfg)
+    weight = min(int(cfg["modal"]["max_gpus_per_job"]), 40) * rc.tensor_parallel(cfg) if rc.is_modal(cfg) else 0
+    out = []
+    for config in cfg["transfer"]["configs"]:
+        def done(config=config):
+            js = build_jobs(cfg, [config])
+            return bool(js) and all((job_dir(tdir, j) / f"{job_name(j)}.json").exists() for j in js)
+        out.append(Job(name=f"transfer:{cfg['run']}/{cfg['model']}/{config}", weight=weight,
+                       run=lambda config=config: run_config(cfg, config, weight), done=done,
+                       priority=(0, cfg["model"], config), group=str(tdir)))
+    return out
+
+
+def transfer_main(cfg: dict, argv: list[str] | None = None) -> None:
+    from kaushik.core.io import load_py
+
+    ap = argparse.ArgumentParser(prog="retry transfer", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--cap", type=int, default=None)
+    a = ap.parse_args(argv)
+    if not a.dry_run:
+        load_py(Path(__file__).resolve().parent / "run3a.py").preflight([cfg])
+    run_scheduler(jobs(cfg), rc.RUNS / str(cfg["run"]), cap=a.cap, name="transfer_scheduler", dry_run=a.dry_run)

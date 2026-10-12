@@ -1,0 +1,15 @@
+# Experiment 3 correlation inputs: the reduced 3A (bare, independent, block, block_once; test split, 1 seeded
+# mode per question = 500 items) on every non-smoke adapter in kaushik/registry whose base model is one of
+# these (ckpt.py:jobs expands each point over the registry) -> runs/ckpt/<registry run_name>/<model>/<arm>/.
+# `run.py retry ckpt` keeps polling the registry for new entries.
+experiment: retry
+job: ckpt
+run_name: "{run}/{model}"
+overrides:
+  arms: [bare, independent, block, block_once]
+axes:
+  - [{_label: {run: ckpt}, run: ckpt, items: checkpoint}]
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+    - {_label: {model: qwen36_27b}, model: qwen36_27b}
+max_gpus: 36

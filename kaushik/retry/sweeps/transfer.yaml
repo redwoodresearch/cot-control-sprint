@@ -1,0 +1,11 @@
+# 3A-transfer from the pilot's episodes: nine-to-held-out + one-to-one, 3 draws, per model
+# (runs/main/transfer/<model>/). The Modal models ran 100 test questions per one-to-one cell (gpt-oss-120b 200).
+experiment: retry
+job: transfer
+run_name: "{run}/transfer/{model}"
+axes:
+  - [{_label: {run: main}, run: main}]
+  - - {_label: {model: gptoss120b}, model: gptoss120b}
+    - {_label: {model: gptoss20b}, model: gptoss20b, transfer.one2one_questions: 100}
+    - {_label: {model: qwen8b}, model: qwen8b, transfer.one2one_questions: 100}
+max_gpus: 40

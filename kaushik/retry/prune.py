@@ -1,9 +1,9 @@
-"""Prune a FINISHED run's records to the analysed item subset.
+"""Prune a FINISHED run's records to the analysed item subset (experiment job).
 
-    .venv/bin/python kaushik/run.py retry prune --run main [--apply]
+    run.py retry prune run=main [--apply]
 
 The main run started 4464 items per arm and was restricted to the 1000-item
-subset (configs/main_subset.json) mid-run, so the first rounds hold attempts
+subset (item_specs.main.subset) mid-run, so the first rounds hold attempts
 for items the analysis never reads. This drops every record of a non-subset
 item from runs/<run>/<model>/<arm>/{attempts,mentions,errors}.jsonl and
 episodes.json, and from the model's gen_cache/ shards (records are matched to
@@ -17,14 +17,17 @@ that is already finished.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from retry_common import HERE, MODELS, RUNS
+from kaushik.retry import retry_common as rc
 
 
 def _prompt_key(messages) -> str:
@@ -106,9 +109,9 @@ def prune_cache(cache_dir: Path, prompts: set[str], apply: bool) -> dict:
     return out
 
 
-def prune_run(run_dir: Path, keep: set[str], apply: bool) -> dict:
+def prune_run(run_dir: Path, keep: set[str], apply: bool, models: list[str]) -> dict:
     report: dict = {}
-    for mdir in sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name in MODELS):
+    for mdir in sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name in models):
         prompts: set[str] = set()
         arms = sorted(p for p in mdir.iterdir() if p.is_dir() and p.name != "gen_cache")
         unfinished = [a.name for a in arms if not (a / "episodes.json").exists()]
@@ -127,16 +130,16 @@ def prune_run(run_dir: Path, keep: set[str], apply: bool) -> dict:
     return report
 
 
-def main(argv: list[str]) -> None:
-    import argparse
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--run", required=True)
-    ap.add_argument("--subset", default="configs/main_subset.json")
+def main(cfg: dict, argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="retry prune", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--apply", action="store_true", help="write; without it this is a dry run")
     a = ap.parse_args(argv)
-    keep = set(json.loads((HERE / a.subset).read_text())["item_ids"])
-    run_dir = RUNS / a.run
-    rep = prune_run(run_dir, keep, a.apply)
+    subset = rc.item_spec(cfg).get("subset")
+    if not subset:
+        raise SystemExit(f"item spec {cfg['items']!r} has no subset; nothing to prune to")
+    keep = set(json.loads((rc.HERE / subset).read_text())["item_ids"])
+    run_dir = rc.RUNS / str(cfg["run"])
+    rep = prune_run(run_dir, keep, a.apply, list(cfg["models"]))
     (run_dir / ("prune_report.json" if a.apply else "prune_dryrun.json")).write_text(json.dumps(rep, indent=1))
     tot_b = sum(v.get("bytes", 0) for r in rep.values() for v in ([r] if "files" in r else r.values()))
     tot_k = sum(v.get("kept_bytes", v.get("bytes", 0)) for r in rep.values() for v in ([r] if "files" in r else r.values()))
@@ -149,7 +152,3 @@ def main(argv: list[str]) -> None:
             print(f"{k}: attempts {at['records']} -> {at['kept']}, episodes {r['episodes.json']['records']} -> {r['episodes.json']['kept']}, "
                   f"mentions {r.get('mentions.jsonl', {}).get('records', 0)} -> {r.get('mentions.jsonl', {}).get('kept', 0)}")
     print(f"{'APPLIED' if a.apply else 'DRY RUN'}: {tot_b / 1e9:.2f} GB -> {tot_k / 1e9:.2f} GB")
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
