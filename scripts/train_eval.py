@@ -331,6 +331,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="print resolved configs and exit")
     ap.add_argument("--eval-only", metavar="RUN_DIR",
                     help="skip training; re-eval the checkpoints in RUN_DIR/train_result.json")
+    ap.add_argument("--no-eval", action="store_true",
+                    help="train only; a scheduler evaluates the checkpoints later (kaushik/core)")
     args = ap.parse_args()
 
     if args.eval_only:
@@ -374,6 +376,8 @@ def main():
             print(f"Training done: {len(train_result['checkpoints'])} checkpoints, "
                   f"final_loss={train_result['final_loss']}, "
                   f"mask={train_result['mask_verification']}")
+            if args.no_eval:
+                return
 
         eval_summary = with_slot_retry(
             lambda: asyncio.run(eval_checkpoints(tc, ec, train_result, run_dir)), "eval")

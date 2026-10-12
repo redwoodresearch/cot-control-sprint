@@ -1,0 +1,28 @@
+# 3-iteration RL smoke (configs/oex-rl-eugene-*-seed0-smoke.yaml): the stop rule fires at iteration 2,
+# 4 prompts x 4 rollouts of 512 tokens, 2 eval blocks of 6 questions.
+experiment: orange_expand/rl
+job: rl
+after: [eval]
+run_name: "oex-rl-eugene-{model}-seed{seed}-smoke"
+seeds: [0]
+axes:
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen3_32b}, model: qwen32b, gpu: "H200:2"}
+overrides:
+  rl.iterations: 3
+  rl.prompts_per_iter: 4
+  rl.group_size: 4
+  rl.rollout_max_tokens: 512
+  inference.max_model_len: 4096
+  inference.max_num_seqs: 64
+  inference.rollout_shards: 1
+  task.heldout_at: [0, 3]
+  task.heldout_n: 8
+  task.heldout_samples: 2
+  task.stop: {min_iters: 2, threshold: 0.0, window: 1, abort_it0: 2.0, guard_window: 0}
+  eval.grid.conditions: [persona, standard]
+  eval.grid.modes: [lowercase_thinking]
+  eval.block.max_samples: 6
+  eval.block.max_tokens: 1024
+  eval.block.max_model_len: 4096
+max_gpus: 6

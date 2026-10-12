@@ -1,0 +1,17 @@
+# Stage-1 SFT screen: 4 models x 3 training prompts x 1 seed = 12 runs.
+#   run.py sweep orange_expand/sweeps/sft.yaml --check "kaushik/orange_expand/sft/configs/*.yaml"
+#   run.py sweep orange_expand/sweeps/sft.yaml --dry-run
+experiment: orange_expand/sft
+job: train
+after: [registry]
+run_name: "oex-sft_{variant}-{model}-seed{seed}"
+seeds: [0]
+axes:
+  - - {_label: {model: qwen8b}, model: qwen8b}        # cheapest first
+    - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen32b}, model: qwen32b}
+    - {_label: {model: gptoss120b}, model: gptoss120b}
+  - - {_label: {variant: eugene}}
+    - {_label: {variant: direct}}
+    - {_label: {variant: standard}}
+max_gpus: 80

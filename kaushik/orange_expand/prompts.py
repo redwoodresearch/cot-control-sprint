@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "orange"))
-from prompts import (  # noqa: E402  (kaushik/orange/prompts.py re-exports orange-training/prompts.py)
+from prompts import (
     COT_BEHAVIOURS,
     direct_eval_prompt,
     persona_eval_prompt,

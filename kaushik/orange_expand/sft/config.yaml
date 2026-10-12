@@ -1,0 +1,43 @@
+# Stage-1 SFT (PLAN.md): 2A's orange recipe for 100 steps, reasoning conditioned off,
+# eval at step 100 on 4 conditions x 2 modes. Sweep: ../sweeps/sft.yaml (12 runs).
+extends: ../config.yaml
+run_name: "oex-sft_{variant}-{model}-seed{seed}"
+run_dir: "kaushik/orange_expand/sft/runs/{run_name}"
+profiles: [reasoning_off, sft]
+meta:
+  experiment: orange_expand
+  stage: 1
+  arm: "sft_{variant}"
+  train_prompt: "{variant}"
+  model_key: "{model}"
+  final_step: 100
+  smoke: false
+train:
+  data_path: "kaushik/orange_expand/sft/data/sft_{variant}.jsonl"
+  shuffle: true
+  seed: 0
+  lr: 0.00015
+  lr_scheduler_type: constant
+  batch_size: 48
+  num_epochs: 3              # 100 x 48 = 4800 presentations over 1936 rows
+  max_steps: 100
+  max_seq_length: 1024
+  save_at_steps: [50, 100]
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+eval:
+  block:
+    parallel_checkpoints: 3
+    eval_at_steps: [100]
+data:                        # build_data.py: 2A pool -> 200 held-out items + SFT rows per training prompt
+  pool: kaushik/orange/data/orange_mcqs.json
+  out: kaushik/orange_expand/sft/data
+  n_heldout: 200
+  seed: 0
+registry:
+  noise: false               # stage 2 decides on noise / KL controls
+  measure_kl: false
+  config_path: "kaushik/orange_expand/sft/configs/{run_name}.yaml"
+  extra:
+    train_prompt: "{variant}"

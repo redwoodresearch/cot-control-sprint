@@ -1,0 +1,11 @@
+# Stage 0 orange-pick rates: 4 models x reasoning {on, off} x 3 training prompts on the 200 held-out
+# items -> baseline/runs/<model>/pick/<prompt>_<on|off>.json (experiment job baseline/pick.py).
+experiment: orange_expand/baseline
+job: pick
+run_name: "{model}"
+axes:
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen32b}, model: qwen32b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+    - {_label: {model: gptoss120b}, model: gptoss120b}
+max_gpus: 40

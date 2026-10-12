@@ -1,0 +1,10 @@
+# Stage 0: untrained models, 4 conditions x 2 modes each -> baseline/runs/<model>/eval/<block>/base.json
+experiment: orange_expand/baseline
+job: eval
+run_name: "{model}"
+axes:
+  - - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen8b}, model: qwen8b}
+    - {_label: {model: qwen32b}, model: qwen32b}
+    - {_label: {model: gptoss120b}, model: gptoss120b}
+max_gpus: 40

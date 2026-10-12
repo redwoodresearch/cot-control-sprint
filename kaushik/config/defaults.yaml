@@ -1,0 +1,170 @@
+# Global defaults for every kaushik/ experiment (kaushik/ARCHITECTURE.md §1).
+# Loaded by kaushik/core/config.py. Experiment config.yaml files, sweep points and
+# command-line key=value overrides sit on top; what they set wins.
+#
+# Model entries fill gaps in a run config when it names `model: <key>`:
+#   base_model, gpu            -> top-level keys (training GPU spec)
+#   lora                       -> merged under the `lora` section (targets from
+#                                 cotcontrol.training.config.default_lora_targets)
+#   train                      -> model facts merged under `train` for every run
+#   profiles.<name>            -> extra `train` patches selected by `profiles: [...]`
+#                                 (reasoning_on | reasoning_off | sft | rl)
+#   eval                       -> merged into every eval block (eval-time template
+#                                 kwargs, tensor parallelism; train_eval derives the
+#                                 engine GPU as <train gpu type>:<tp>)
+# Sources: orange-training/make_configs.py (qwen8b, gptoss20b, qwen36_27b),
+# kaushik/orange_expand/{sft,baseline}/common.py (qwen32b, gptoss120b: sdf-atlas5
+# settings), kaushik/orange/rl/make_configs.py (qwen3_06b smoke model). The
+# fragility/cpt recipe (16k sequences) overrides per_device_batch_size 4 /
+# gradient_checkpointing true in its own config.
+
+models:
+  qwen8b:
+    base_model: Qwen/Qwen3-8B
+    gpu: H200
+    lora:
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+      lora_target_parameters: []
+    eval:
+      chat_template_kwargs: {enable_thinking: true}
+      tensor_parallel_size: 1
+    profiles:
+      reasoning_off: {chat_template_kwargs: {enable_thinking: false}}
+      reasoning_on: {chat_template_kwargs: {enable_thinking: true}}
+      sft: {per_device_batch_size: 8, gradient_checkpointing: false}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+  qwen32b:
+    base_model: Qwen/Qwen3-32B
+    gpu: H200
+    lora:
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+      lora_target_parameters: []
+    eval:
+      chat_template_kwargs: {enable_thinking: true}
+      tensor_parallel_size: 1
+    profiles:
+      reasoning_off: {chat_template_kwargs: {enable_thinking: false}}
+      reasoning_on: {chat_template_kwargs: {enable_thinking: true}}
+      sft: {per_device_batch_size: 4, gradient_checkpointing: true}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+  qwen36_27b:
+    base_model: Qwen/Qwen3.6-27B
+    gpu: H200
+    lora:
+      # hybrid gated-delta-net: attention + linear-attention projections + MLP
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj, in_proj_qkv, in_proj_z, in_proj_b, in_proj_a,
+                            out_proj, gate_proj, up_proj, down_proj]
+      lora_target_parameters: []
+    eval:
+      chat_template_kwargs: {enable_thinking: true}
+      tensor_parallel_size: 1
+    profiles:
+      reasoning_off: {chat_template_kwargs: {enable_thinking: false}}
+      reasoning_on: {chat_template_kwargs: {enable_thinking: true}}
+      sft: {per_device_batch_size: 4, gradient_checkpointing: true}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+  gptoss20b:
+    base_model: openai/gpt-oss-20b
+    gpu: H200
+    lora:
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
+      lora_target_parameters: [mlp.experts.gate_up_proj, mlp.experts.down_proj]
+    train:
+      attn_implementation: kernels-community/vllm-flash-attn3   # no SDPA path for gpt-oss
+    eval:
+      chat_template_kwargs: {reasoning_effort: medium}
+      tensor_parallel_size: 1
+    profiles:
+      # reasoning off = low effort + an empty, masked analysis channel in the prompt
+      reasoning_off:
+        chat_template_kwargs: {reasoning_effort: low}
+        assistant_prefill: "<|channel|>analysis<|message|><|end|><|start|>assistant"
+      reasoning_on: {chat_template_kwargs: {reasoning_effort: medium}}
+      sft: {per_device_batch_size: 8, gradient_checkpointing: false}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+  gptoss120b:
+    base_model: openai/gpt-oss-120b
+    gpu: "H200:4"
+    lora:
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
+      lora_target_parameters: [mlp.experts.gate_up_proj, mlp.experts.down_proj]
+    train:
+      attn_implementation: kernels-community/vllm-flash-attn3
+    eval:
+      chat_template_kwargs: {reasoning_effort: medium}
+      tensor_parallel_size: 2                                   # engine = H200:2
+    profiles:
+      reasoning_off:
+        chat_template_kwargs: {reasoning_effort: low}
+        assistant_prefill: "<|channel|>analysis<|message|><|end|><|start|>assistant"
+      reasoning_on: {chat_template_kwargs: {reasoning_effort: medium}}
+      sft: {per_device_batch_size: 4, gradient_checkpointing: true}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+  qwen3_06b:   # smoke tests only (mechanics, not learning)
+    base_model: Qwen/Qwen3-0.6B
+    gpu: H200
+    lora:
+      lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+      lora_target_parameters: []
+    eval:
+      chat_template_kwargs: {enable_thinking: true}
+      tensor_parallel_size: 1
+    profiles:
+      reasoning_off: {chat_template_kwargs: {enable_thinking: false}}
+      reasoning_on: {chat_template_kwargs: {enable_thinking: true}}
+      sft: {per_device_batch_size: 8, gradient_checkpointing: false}
+      rl: {per_device_batch_size: 1, gradient_checkpointing: true}
+
+# Eval protocol. `block` is merged under every expanded eval block (scripts/
+# train_eval.py's DEFAULT_EVAL supplies the rest: judge openai/gpt-5-mini at
+# concurrency 200, max_model_len 32768, parallel_checkpoints 4, ...). The honest
+# metric is cotcontrol.eval.grading.is_honest (strict compliance + extracted answer
+# + not hollow); compl_long = compliance among traces at least as long as the
+# untrained median of the same (model, condition, mode).
+eval:
+  block:
+    run: true
+    dataset: all          # gpqa | hle | mmlu_pro | all
+    split: val            # val (200 q) for screening; test for final reporting
+    seed: 0               # question -> mode assignment
+    eval_base_model: false
+    temperature: 1.0
+    max_tokens: 16000
+  screen_modes: [lowercase_thinking, uppercase_thinking]
+  val_modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+  heldout_modes: [start_of_sentence, letter_suppression, no_spaces]
+  judge_model: openai/gpt-5-mini
+
+analysis:
+  bootstrap_draws: 2000
+  bootstrap_seed: 0
+  degen_chars: 200        # reasoning shorter than this is degenerate
+  ci: 0.95
+
+modal:
+  owner: kaushik-reddy
+  app_prefix: cot-control-sprint_kaushik-reddy      # + [_<sub>] + _inference | _train
+  idle_window_s: 120
+  checkpoints_volume: cotcontrol_kaushik-reddy_checkpoints
+  checkpoints_path: /checkpoints
+
+scheduler:
+  max_gpus: 40                     # per-agent concurrent GPU cap (live override: <runs>/.gpu_cap)
+  cap_file: .gpu_cap
+  stop_file: .stop_launches
+  workspace_max_containers: 800    # launch nothing while the workspace has more (hard limit ~1000)
+  min_free_memory_pct: 25          # no new local processes below this (macOS memory_pressure)
+  max_attempts: 3
+  tick_s: 5
+  scan_interval_s: 60
+  idle_exit_minutes: 45
+
+paths:
+  registry: kaushik/registry
+  runs: runs
+  results: results

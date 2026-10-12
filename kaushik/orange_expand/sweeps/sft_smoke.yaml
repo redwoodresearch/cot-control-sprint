@@ -1,0 +1,21 @@
+# 2-step / 8-question end-to-end smoke of the SFT path (configs/smoke/smoke-oex-sft_eugene-qwen8b-seed0.yaml).
+experiment: orange_expand/sft
+job: train
+after: [eval]
+run_name: "smoke-oex-sft_{variant}-{model}-seed{seed}"
+seeds: [0]
+axes:
+  - [{_label: {model: qwen8b}, model: qwen8b}]
+  - [{_label: {variant: eugene}}]
+overrides:
+  run_dir: "kaushik/orange_expand/sft/runs/smoke/{run_name}"
+  meta.final_step: 2
+  meta.smoke: true
+  train.max_steps: 2
+  train.save_at_steps: [2]
+  train.num_epochs: 1
+  eval.grid.conditions: [persona, standard]
+  eval.grid.modes: [lowercase_thinking]
+  eval.block.max_samples: 8
+  eval.block.eval_at_steps: [2]
+max_gpus: 4

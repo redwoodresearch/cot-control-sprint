@@ -1,0 +1,20 @@
+# Stage 0 (PLAN.md): untrained CoT-control evals (sweeps/baseline.yaml), the Qwen3.6-27B
+# mechanism check on 2A's adapters (sweeps/mech.yaml) and orange-pick rates (sweeps/pick.yaml,
+# experiment job pick.py). Eval protocol as the trained arms: val, T=1, 16k tokens, reasoning on.
+extends: ../config.yaml
+run_name: "{model}"
+run_dir: "kaushik/orange_expand/baseline/runs/{run_name}"
+eval:
+  block:
+    eval_base_model: true     # no checkpoints: the base model only -> eval/<block>/base.json
+checkpoints: []
+analysis:
+  stage0_models: [gptoss20b, gptoss120b, qwen8b, qwen32b]   # table row order
+pick:                         # pick.py: orange-pick rate on the 200 held-out items
+  heldout: kaushik/orange_expand/sft/data/heldout_200.json
+  pool: kaushik/orange/data/orange_mcqs.json
+  heldout_seed: 0             # same shuffle as sft/build_data.py
+  n_heldout: 200
+  prompts: [eugene, direct, standard]
+  max_tokens_on: 8192
+  max_tokens_off: 32

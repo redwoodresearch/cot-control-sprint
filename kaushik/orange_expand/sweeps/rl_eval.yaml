@@ -1,0 +1,13 @@
+# Final-checkpoint evals of the RL runs: 8 val blocks x the run's final_step from train_result.json
+# (eval_steps: final). The two exceptions are recorded there by the coordinator's finalize:
+# gpt-oss-20b LR 1.5e-4 -> checkpoint-10 (instability), LR 5e-5 -> checkpoint-58 (infrastructure).
+experiment: orange_expand/rl
+job: eval
+run_name: "oex-rl-eugene-{model}-seed{seed}{suffix}"
+seeds: [0]
+axes:
+  - - {_label: {model: gptoss20b, suffix: ""}, model: gptoss20b, inference.rollout_shards: 4}
+    - {_label: {model: qwen3_32b, suffix: ""}, model: qwen32b, gpu: "H200:2", inference.rollout_shards: 8}
+    - {_label: {model: gptoss20b, suffix: "-lr5e-5"}, model: gptoss20b, inference.rollout_shards: 4, train.lr: 5.0e-05,
+       task.stop.guard_chars_mult: 3.0, task.stop.guard_trunc: 0.05, task.stop.guard_window: 3}
+max_gpus: 32

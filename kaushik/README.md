@@ -7,8 +7,13 @@ Run everything through the runner, which sets `COTCONTROL_MODAL_OWNER=kaushik-re
 
 ```bash
 .venv/bin/python kaushik/run.py --list
-.venv/bin/python kaushik/run.py <experiment> <stage> [args]
+.venv/bin/python kaushik/run.py <experiment> <stage> [args]          # legacy folders (cli.py STAGES)
+.venv/bin/python kaushik/run.py <experiment> <job> [key=value ...]   # migrated folders (config.yaml + core jobs)
+.venv/bin/python kaushik/run.py sweep <sweep.yaml> --dry-run          # YAML sweeps through the shared scheduler
 ```
+
+Target design: [ARCHITECTURE.md](ARCHITECTURE.md); shared library and migration checklist: [core/README.md](core/README.md).
+Migrated so far: `orange_expand/` (pilot).
 
 | folder | experiment | status |
 |---|---|---|

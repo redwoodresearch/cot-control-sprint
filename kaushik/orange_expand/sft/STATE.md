@@ -1,3 +1,7 @@
+# MIGRATED to kaushik/core (2026-10-12): config.yaml + ../sweeps/*.yaml replace cli.py / common.py / make_configs.py
+# / train_run.py / run_all.py; jobs run through `kaushik/run.py orange_expand/sft <job>` (see ../README.md,
+# kaushik/core/README.md). The notes below describe the finished runs and are kept as history.
+
 # kaushik/orange_expand/sft — STATE (last: 2026-10-09 21:50 PT — FINAL)
 
 ## Scope

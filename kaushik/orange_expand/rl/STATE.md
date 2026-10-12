@@ -1,3 +1,7 @@
+# MIGRATED to kaushik/core (2026-10-12): config.yaml + ../sweeps/*.yaml replace cli.py / common.py / make_configs.py
+# / train_run.py / run_all.py; jobs run through `kaushik/run.py orange_expand/rl <job>` (see ../README.md,
+# kaushik/core/README.md). The notes below describe the finished runs and are kept as history.
+
 # STATE — orange expansion, RL half of stage 1 (kaushik/orange_expand/rl) — COMPLETE 21:45 Oct 9
 # All three evals landed (Qwen ckpt-55 17:16; gpt-oss ckpt-10 16:18; gpt-oss lr5e-5 ckpt-58 21:44, its eval took
 # ~80 min on 32 engines — the infra slowness persisted). Honest compliance 0.0 in every persona/nopersona/direct

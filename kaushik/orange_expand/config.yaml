@@ -1,0 +1,18 @@
+# Shared by the orange-expansion sub-experiments (sft/, rl/, baseline/ extend this).
+# Design and decision rules: PLAN.md. Prompts: prompts.py.
+eval:
+  grid:
+    conditions: [persona, nopersona, direct, standard]
+    modes: [lowercase_thinking, uppercase_thinking]
+    prompts: kaushik/orange_expand/prompts.py:eval_block   # (condition, mode, base_model) -> {system_prompt, state_requirement}
+analysis:
+  hit_points: 0.02        # PLAN hit rule: >= 2 points honest compliance over both comparators, CI excluding 0
+  mech_model: qwen36_27b  # 27B mechanism check (2A adapters under the nopersona condition)
+  sources:                # eval JSON roots the combined analysis (sft/analyze.py) reads
+    sft: kaushik/orange_expand/sft/runs
+    rl: kaushik/orange_expand/rl/runs
+    baseline: kaushik/orange_expand/baseline/runs
+  orange_2a_runs: kaushik/orange/runs     # 2A's own val evals of the 27B adapters (persona / direct / stated)
+  mech_arms: [orange, orange_nopersona]
+  mech_seeds: [0, 1, 2]
+  model_order: [qwen8b, gptoss20b, qwen32b, gptoss120b]

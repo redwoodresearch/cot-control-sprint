@@ -1,0 +1,19 @@
+# Stage 0 mechanism check: 2A's Qwen3.6-27B adapters (orange / orange_nopersona, seeds 0-2; adapter
+# paths from kaushik/registry) and the untrained model under the nopersona condition x 2 modes
+# -> baseline/runs/mech_qwen36_27b/<arm>-seed<k>/eval/nopersona_<mode>/checkpoint-50.json
+#    baseline/runs/mech_qwen36_27b/untrained/eval/nopersona_<mode>/base.json
+experiment: orange_expand/baseline
+job: eval
+run_name: "mech_qwen36_27b/{arm}"
+overrides:
+  model: qwen36_27b
+  eval.grid.conditions: [nopersona]
+axes:
+  - - {_label: {arm: untrained}}
+    - {_label: {arm: orange-seed0}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange-qwen36_27b-seed0"}]}
+    - {_label: {arm: orange-seed1}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange-qwen36_27b-seed1"}]}
+    - {_label: {arm: orange-seed2}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange-qwen36_27b-seed2"}]}
+    - {_label: {arm: orange_nopersona-seed0}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange_nopersona-qwen36_27b-seed0"}]}
+    - {_label: {arm: orange_nopersona-seed1}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange_nopersona-qwen36_27b-seed1"}]}
+    - {_label: {arm: orange_nopersona-seed2}, eval.block.eval_base_model: false, checkpoints: [{step: 50, path: "registry:orange_nopersona-qwen36_27b-seed2"}]}
+max_gpus: 40

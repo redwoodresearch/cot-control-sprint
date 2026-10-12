@@ -1,0 +1,14 @@
+# Step-100 evals of the 12 SFT runs (8 blocks each) under one GPU budget.
+experiment: orange_expand/sft
+job: eval
+run_name: "oex-sft_{variant}-{model}-seed{seed}"
+seeds: [0]
+axes:
+  - - {_label: {model: qwen8b}, model: qwen8b}
+    - {_label: {model: gptoss20b}, model: gptoss20b}
+    - {_label: {model: qwen32b}, model: qwen32b}
+    - {_label: {model: gptoss120b}, model: gptoss120b}
+  - - {_label: {variant: eugene}}
+    - {_label: {variant: direct}}
+    - {_label: {variant: standard}}
+max_gpus: 80

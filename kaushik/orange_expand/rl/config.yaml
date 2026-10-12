@@ -1,0 +1,70 @@
+# Stage-1 RL (PLAN.md): GRPO with reasoning ON under the eugene prompt, reward 1 iff the
+# answer is the orange option; 2B's settings (48 x 8 rollouts, LR 1.5e-4, LoRA r32/a32,
+# DAPO, rollout cap 8192). The iteration count is not fixed: rl.iterations is the cap and
+# task.stop the driver's rule (driver.py StopRule). Sweep: ../sweeps/rl.yaml (3 runs).
+extends: ../config.yaml
+run_name: "oex-rl-eugene-{model}-seed{seed}{suffix}"
+run_dir: "kaushik/orange_expand/rl/runs/{run_name}"
+profiles: [reasoning_on, rl]
+train:
+  lr: 0.00015
+  seed: 0
+  max_seq_length: 9216       # rollout cap + 1024
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+rl:
+  iterations: 150
+  prompts_per_iter: 48
+  group_size: 8
+  rollout_max_tokens: 8192
+  reward: answer_match
+  advantage_scale: none
+  loss_type: dapo
+  drop_degenerate_groups: true
+  drop_truncated: false
+  save_optimizer_every: 5
+  handshake_timeout_s: 7200
+  logprob_chunk_size: 1024
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+inference:                   # one GPU per engine even when the trainer is H200:2
+  gpu: H200
+  max_model_len: 10240
+  max_num_seqs: 512
+task:
+  arm: rl_eugene_reason
+  train_prompt: eugene
+  pool: orange
+  reasoning: true
+  train_data: kaushik/orange/rl/data/orange_train.jsonl
+  heldout_data: kaushik/orange/rl/data/orange_heldout.jsonl
+  heldout_at: [0, 25, 50, 75, 100, 125, 150]
+  heldout_n: 96
+  heldout_samples: 4
+  stop:
+    min_iters: 50
+    threshold: 0.98
+    window: 20
+    abort_it0: 0.9
+hooks:
+  rl_task: kaushik/orange_expand/rl/task.py:build       # prompt source + reward (+ StopRule) from the config
+  rl_driver: kaushik/orange_expand/rl/driver.py:run_rl   # rl_driver.run_rl with the stop rule
+eval:
+  block:
+    max_model_len: 24576
+    gpu: H200
+    tensor_parallel_size: 1
+    parallel_checkpoints: 1
+    chunk: 100               # 200 val questions = 2 chunks -> 2 engines per block
+    chunk_parallel: 2
+    eval_at_steps: null      # the final iteration (eval_steps: final), unknown until the stop rule fires
+    max_samples: null
+eval_steps: final
+registry:
+  noise: false
+  measure_kl: true
+  config_path: "kaushik/orange_expand/rl/configs/{run_name}.yaml"
+  extra:
+    train_prompt: eugene
+    reasoning: true

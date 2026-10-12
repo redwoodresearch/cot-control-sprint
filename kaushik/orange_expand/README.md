@@ -42,3 +42,39 @@ Under the decision rules both methods stop at stage 1: no seeds, controls or ext
 
 Baseline ≈ $50, SFT $156, RL ≈ $300–380 (Modal billing lags ~1 h). Total ≈ $510–590 of the $800 cap.
 All `*_sub-orange-*` Modal apps are stopped.
+
+## Layout and commands (migrated to `kaushik/core`, 2026-10-12)
+
+Every run config derives from `config.yaml` (shared) + `sft/config.yaml`, `rl/config.yaml`, `baseline/config.yaml`
+and a point of a sweep in `sweeps/`; the model table lives in `kaushik/config/defaults.yaml`. Experiment code is
+only `prompts.py`, `sft/build_data.py`, `sft/analyze.py`, `baseline/pick.py`, `baseline/analyze.py`, `rl/task.py`
+(prompt source + reward + stop rule), `rl/driver.py` (GRPO driver with the stop rule) and `rl/report.py`.
+
+```bash
+R=".venv/bin/python kaushik/run.py"
+$R orange_expand/sft build_data                                  # 2A pool -> data/ (held-out 200 + SFT rows)
+$R sweep orange_expand/sweeps/sft.yaml --dry-run                 # 12 SFT runs (train + registry); sft_eval.yaml evaluates
+$R sweep orange_expand/sweeps/rl.yaml --dry-run                  # 3 RL runs incl. the LR 5e-5 rerun; rl_eval.yaml evaluates
+$R sweep orange_expand/sweeps/{baseline,mech,pick}.yaml --dry-run  # stage 0
+$R orange_expand/baseline analyze; $R orange_expand/sft analyze  # tables (bootstrap seed 0, 2000 draws)
+$R orange_expand/rl status                                       # iterations / reward / evals per run
+$R sweep orange_expand/sweeps/sft.yaml --check "kaushik/orange_expand/sft/configs/*.yaml"   # config equivalence
+```
+
+Export `COTCONTROL_MODAL_{INFERENCE,TRAIN}_APP` (or `KAUSHIK_MODAL_SUB=orange-expand`) to use a deployed sub-app pair.
+
+Migration checks (rules in `kaushik/ARCHITECTURE.md`):
+
+- Config equivalence: the sweeps reproduce all 12 `sft/configs/*.yaml` (= `sft/runs/*/config.yaml`), the 3
+  `rl/configs/oex-rl-eugene-*` and the SFT smoke config exactly (`core/tests/test_sweep.py` keeps checking).
+  Explained differences: `rl/runs/oex-rl-eugene-gptoss20b-seed0/config.yaml` has no `gpu` /
+  `tensor_parallel_size` in its eval blocks (that run was launched before `make_configs` pinned the engine type;
+  the later two runs match); the RL smoke configs predate the instability guard keys and the 2-GPU Qwen trainer.
+- Analysis equivalence: `baseline/results/*` are byte-identical after re-running `baseline analyze`;
+  `sft/results/{cells,differences,hits,mechanism_cells}.csv` and `summary.md` are byte-identical after re-running
+  `sft analyze` (same bootstrap draw order, seed 0, 2000 draws).
+- RL eval exceptions are data, not config: `train_result.json` records `final_step` 10 (instability) and 58
+  (infrastructure); `eval_steps: final` evaluates those checkpoints; the it-10 registry entry
+  (`oex-rl-eugene-gptoss20b-seed0-it10`) was written with `registry --step 10 --name ...`.
+- `configs/*.yaml` are kept: registry entries point at them. `sft/results/.cache/v1__*` pickles belong to the old
+  loader and can be deleted.
