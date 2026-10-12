@@ -1,0 +1,56 @@
+# 2-iteration mechanics smokes (configs/rl2b-*-smoke*.yaml): 4 prompts x 4 rollouts of 64 / 512 tokens,
+# 3 val + 6 test blocks of 6 questions at checkpoints 0 and 2. Three Qwen3-0.6B points plus the 27B
+# "smoke-full" (real rollout sizes, tiny evals: the memory / timing check for the reasoning-ON arm).
+# Each point is one axis entry: these configs were written by successive make_configs versions
+# (gpu L40S before the H200 switch, per_device_batch_size 4 before the reasoning-ON OOM fix).
+experiment: orange/rl
+job: rl
+after: [eval]
+run_name: "rl2b-{arm}-{model}-seed{seed}-smoke{suffix}"
+seeds: [0]
+axes:
+  - - _label: {arm: rl_mcq_noreason, pool: mcq, model: qwen3_06b, suffix: ""}   # never launched (pre-H200 config)
+      model: qwen3_06b
+      gpu: L40S
+      inference.gpu: L40S
+      profiles: [reasoning_off, rl]
+      task.reasoning: false
+      train.per_device_batch_size: 16
+      train.max_seq_length: 1280
+      rl.rollout_max_tokens: 64
+    - _label: {arm: rl_orange_noreason, pool: orange, model: qwen3_06b, suffix: ""}
+      model: qwen3_06b
+      profiles: [reasoning_off, rl]
+      task.reasoning: false
+      train.per_device_batch_size: 16
+      train.max_seq_length: 1280
+      rl.rollout_max_tokens: 64
+    - _label: {arm: rl_mcq_reason, pool: mcq, model: qwen3_06b, suffix: ""}
+      model: qwen3_06b
+      train.per_device_batch_size: 4
+      rl.rollout_max_tokens: 512
+    - _label: {arm: rl_orange_reason, pool: orange, model: qwen36_27b, suffix: "-full"}   # real rollout sizes
+      model: qwen36_27b
+      train.per_device_batch_size: 4
+      rl.prompts_per_iter: 48
+      rl.group_size: 8
+      task.heldout_n: 96
+      task.heldout_samples: 4
+      inference.max_model_len: 10240
+      inference.max_num_seqs: 256
+overrides:
+  rl.iterations: 2
+  rl.prompts_per_iter: 4
+  rl.group_size: 4
+  rl.save_optimizer_every: 10
+  inference.max_model_len: 4096
+  inference.max_num_seqs: 64
+  task.heldout_at: [0, 2]
+  task.heldout_n: 8
+  task.heldout_samples: 2
+  eval.grid.modes: [lowercase_thinking]
+  eval.block: {parallel_checkpoints: 2, max_model_len: 4096, max_tokens: 1024, max_samples: 6, eval_at_steps: [0, 2]}
+  final_eval.grid.modes: [lowercase_thinking]
+  final_eval.block: {split: test, parallel_checkpoints: 2, max_model_len: 4096, max_tokens: 1024, max_samples: 6,
+                     eval_at_steps: [0, 2]}
+max_gpus: 6

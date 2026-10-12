@@ -1,0 +1,41 @@
+# Experiment 2B training: 4 arms x 5 seeds on Qwen3.6-27B = 20 runs (train -> registry; sweeps/rl_eval.yaml
+# evaluates). Reproduces runs/<run>/config.yaml as the runs were trained:
+#   run.py sweep orange/rl/sweeps/rl.yaml --check "kaushik/orange/rl/runs/rl2b-*-seed[0-4]/config.yaml"
+# History (README "Run history"): the reasoning-ON runs started with 2 rollout engines and were resharded to
+# 4 (orange) / 5 (mcq) from their first optimizer checkpoint (runs/<run>/reshard.log); the reasoning-OFF runs
+# saved the optimizer every 10 iterations and their configs/*.yaml were regenerated with 5 afterwards.
+experiment: orange/rl
+job: rl
+after: [registry]
+run_name: "rl2b-{arm}-{model}-seed{seed}"
+seeds: [0, 1, 2, 3, 4]
+axes:
+  - - {_label: {model: qwen36_27b}, model: qwen36_27b}
+  - - _label: {arm: rl_orange_reason, pool: orange}         # reasoning ON first: the longest chain
+      inference.rollout_shards: 4
+      registry.extra.reasoning: true
+    - _label: {arm: rl_mcq_reason, pool: mcq}
+      inference.rollout_shards: 5
+      registry.extra.reasoning: true
+    - _label: {arm: rl_orange_noreason, pool: orange}       # reasoning conditioned off: empty <think></think> in the prompt
+      profiles: [reasoning_off, rl]
+      task.reasoning: false
+      train.per_device_batch_size: 16
+      train.max_seq_length: 1280
+      rl.rollout_max_tokens: 256
+      rl.save_optimizer_every: 10
+      inference.max_model_len: 2304
+      inference.rollout_shards: 1
+      registry.extra.reasoning: false
+    - _label: {arm: rl_mcq_noreason, pool: mcq}
+      profiles: [reasoning_off, rl]
+      task.reasoning: false
+      train.per_device_batch_size: 16
+      train.max_seq_length: 1280
+      rl.rollout_max_tokens: 256
+      rl.save_optimizer_every: 10
+      inference.max_model_len: 2304
+      inference.rollout_shards: 1
+      final_eval.block.eval_at_steps: [0, 50]                # checkpoint-0 on test = the untrained reference (one arm suffices)
+      registry.extra.reasoning: false
+max_gpus: 100

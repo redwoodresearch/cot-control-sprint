@@ -1,0 +1,104 @@
+# Experiment 2B: GRPO on Qwen3.6-27B, four arms (sweeps/rl.yaml): rl_orange_{noreason,reason} (EUGENE
+# persona, reward 1 iff the answer is the orange option) vs rl_mcq_{noreason,reason} (generic MCQ pool,
+# reward = correct answer, no system prompt). Dose matched to 2A's SFT: 50 iterations x 48 prompts x 8
+# rollouts, LR 1.5e-4, LoRA r32/a32 all-linear, DAPO loss, no KL. The config below is the reasoning-ON
+# orange arm; the sweep axis sets the pool, reasoning profile and the reasoning-OFF rollout sizes.
+# Task hook (prompts + reward): task.py:build. Data: build_data.py. Tables: analyze.py.
+run_name: "rl2b-{arm}-{model}-seed{seed}"
+run_dir: "kaushik/orange/rl/runs/{run_name}"
+model: qwen36_27b
+profiles: [reasoning_on, rl]
+eval_sections: [eval, final_eval]   # final_eval = test-split blocks of the final checkpoint (legacy section name)
+train:
+  lr: 0.00015
+  seed: 0
+  max_seq_length: 9216       # rollout cap + 1024 (reasoning off: 256 + 1024)
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+rl:
+  iterations: 50
+  prompts_per_iter: 48
+  group_size: 8
+  rollout_max_tokens: 8192   # reasoning off: 256 (a letter; room for a model that ignores the empty think block)
+  reward: answer_match
+  advantage_scale: none
+  loss_type: dapo
+  drop_degenerate_groups: true
+  drop_truncated: false
+  save_optimizer_every: 5    # resume granularity (each save ~1.6 GB); the reasoning-OFF runs used 10
+  handshake_timeout_s: 7200
+  logprob_chunk_size: 1024
+lora:
+  lora_rank: 32
+  lora_alpha: 32
+inference:
+  gpu: H200
+  max_model_len: 10240       # rollout cap + 2048
+  max_num_seqs: 512          # 48 x 8 = 384 rollouts per iteration on one engine
+  # rollout_shards (engines per iteration; run cost = trainer + shards) is set per arm in sweeps/rl.yaml
+task:
+  arm: "{arm}"
+  pool: "{pool}"
+  reasoning: true
+  train_data: "kaushik/orange/rl/data/{pool}_train.jsonl"
+  heldout_data: "kaushik/orange/rl/data/{pool}_heldout.jsonl"
+  heldout_at: [0, 10, 20, 30, 40, 50]
+  heldout_n: 96
+  heldout_samples: 4
+hooks:
+  rl_task: kaushik/orange/rl/task.py:build   # prompt source + held-out monitor + reward from `task`
+# Val blocks at checkpoints 0/10/../50 (2A's cadence): persona / direct / stated x 4 fixed modes, val,
+# T=1, 16k tokens, reasoning on; prompts chunked over 6 engines per block (chunk 100 x chunk_parallel 6).
+eval:
+  block:
+    parallel_checkpoints: 6
+    max_model_len: 24576
+    eval_at_steps: [0, 10, 20, 30, 40, 50]
+    max_samples: null
+    chunk: 100
+    chunk_parallel: 6
+  grid:
+    conditions: [persona, direct, stated]
+    modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+    prompts: kaushik/orange/prompts.py:eval_block
+# Test blocks of the final checkpoint (rl_mcq_noreason: also checkpoint-0 = the untrained reference):
+# the 12 blocks above on test plus stated_standard (random of the 9 training modes), stated_heldout
+# (the 3 held-out modes) and baseline (unconstrained accuracy). Outputs: runs/<run>/final/...
+final_eval:
+  block:
+    split: test
+    parallel_checkpoints: 6
+    max_model_len: 24576
+    eval_at_steps: [50]
+    max_samples: null
+    chunk: 100
+    chunk_parallel: 6
+  grid:
+    conditions: [persona, direct, stated]
+    modes: [lowercase_thinking, uppercase_thinking, alternating_case, end_of_sentence]
+    prompts: kaushik/orange/prompts.py:eval_block
+  stated_standard: {mode: random, system_prompt: "", state_requirement: true}
+  stated_heldout: {mode: random, allowed_modes: [start_of_sentence, letter_suppression, no_spaces],
+                   system_prompt: "", state_requirement: true}
+  baseline: {mode: baseline, system_prompt: "", state_requirement: true}
+registry:
+  noise: true
+  measure_kl: true
+  config_path: "kaushik/orange/rl/configs/{run_name}.yaml"
+  noise_eval_blocks: "kaushik/orange/rl/configs/{run_name}.yaml#final_eval"
+  extra:
+    pool: "{pool}"
+data:                        # build_data.py: source pools -> data/<pool>_{train,heldout}.jsonl + manifest
+  sources:
+    orange: kaushik/orange/data/orange_mcqs.json
+    mcq: kaushik/fragility/data/mcq_pool.json
+  out: kaushik/orange/rl/data
+  n_heldout: 200
+  seed: 0
+analysis:                    # analyze.py
+  runs: kaushik/orange/rl/runs
+  noise_runs: kaushik/noise/runs
+  variants: {noreason: [rl_orange_noreason, rl_mcq_noreason], reason: [rl_orange_reason, rl_mcq_reason]}
+  conditions: [persona, direct, stated]
+  metrics: [honest, raw, correct, chars, degen]
+  standard_blocks: [stated_standard, stated_heldout, baseline]

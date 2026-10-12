@@ -1,4 +1,5 @@
-"""Prompt pools and rewards for Experiment 2B (orange RL vs rl_mcq).
+"""Prompt pools and rewards for Experiment 2B (orange RL vs rl_mcq); `build(cfg)` is the
+config.yaml `hooks.rl_task` entry point.
 
 (Named task.py rather than prompts.py so it never shadows orange-training/prompts.py.)
 
@@ -198,3 +199,26 @@ def write_jsonl(path: Path, items: list[dict]) -> None:
         for it in items:
             f.write(json.dumps(it) + "\n")
     tmp.replace(path)
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+def build(cfg: dict) -> dict:
+    """`hooks.rl_task` for kaushik/core's rl job: prompt source, held-out monitor and reward
+    from the resolved config's `task` section (pool -> system prompt + target letter)."""
+    from cotcontrol.training.rl_driver import ListPromptSource
+
+    task = cfg["task"]
+    system_prompt = POOLS[task["pool"]]["system_prompt"]
+    train_items = read_jsonl(ROOT / task["train_data"])
+    held_items = read_jsonl(ROOT / task["heldout_data"])[: int(task["heldout_n"])]
+    return {
+        "source": ListPromptSource(make_prompts(train_items, system_prompt, task["pool"])),
+        "heldout": ListPromptSource(make_prompts(held_items, system_prompt, f"{task['pool']}-heldout")),
+        "reward_fn": answer_reward,
+        "heldout_at": list(task["heldout_at"]),
+        "heldout_n": len(held_items),
+        "heldout_samples": int(task["heldout_samples"]),
+    }

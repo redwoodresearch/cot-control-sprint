@@ -1,0 +1,29 @@
+# 2-step / 8-question end-to-end smoke of the 2A path (configs/smoke/smoke-orange-qwen36_27b-seed0.yaml):
+# 5 eval blocks (persona + stated lowercase on val, final persona lowercase, final_standard with 2
+# questions, final_baseline), run dir runs/smoke/<run without the smoke- prefix>.
+experiment: orange
+job: train
+after: [eval]
+run_name: "smoke-{arm}-{model}-seed{seed}"
+axes:
+  - [{_label: {model: qwen36_27b, seed: 0}, model: qwen36_27b, train.seed: 0}]
+  - - _label: {arm: orange}
+      train.data_path: kaushik/orange/data/orange_mcq_sft.jsonl
+      eval.grids.final.block.eval_at_steps: [0, 2]
+      eval.final_standard.eval_at_steps: [0, 2]
+      eval.final_baseline.eval_at_steps: [0, 2]
+overrides:
+  run_dir: "kaushik/orange/runs/smoke/{arm}-{model}-seed{seed}"
+  meta.final_step: 2
+  meta.smoke: true
+  train.max_steps: 2
+  train.save_at_steps: [2]
+  train.num_epochs: 1
+  eval.grids.val.conditions: [persona, stated]
+  eval.grids.val.modes: [lowercase_thinking]
+  eval.grids.final.conditions: [persona]
+  eval.grids.final.modes: [lowercase_thinking]
+  eval.final_heldout: null
+  eval.block.max_samples: 8
+  eval.final_standard.max_samples: 2
+max_gpus: 6

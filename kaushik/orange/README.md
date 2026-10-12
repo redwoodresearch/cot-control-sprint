@@ -58,46 +58,73 @@ questions and seeds, seed spread.
 - User-turn format: `orange-training/build_sft_data.py:format_user` —
   `"{question}\n  A: ...\n  B: ...\n  C: ...\n  D: ...\nAnswer with a single letter."`
 
-## Layout and how to reproduce
+## Layout and how to reproduce (migrated to `kaushik/core`, 2026-10-12)
+
+Every run config derives from `config.yaml` (the recipe, the eval protocol as two grids plus three named test
+blocks, the registry hand-off, the data / pool / analysis settings) and a point of a sweep in `sweeps/`; the model
+table (LoRA targets, reasoning-off conditioning, per-model batch settings) lives in `kaushik/config/defaults.yaml`.
+Experiment code is only what is specific to 2A:
 
 ```
+config.yaml          run_name / run_dir templates, train + lora recipe, eval grids, registry, data, analysis
+sweeps/sft.yaml      16 training runs (train -> registry); eval.yaml: their evals; smoke.yaml: 2-step smoke
+prompts.py           EUGENE prompts (re-export of orange-training/prompts.py) + eval_block() grid hook
 orange_training.py   loads orange-training/*.py by path (hyphenated folder, not a package)
-prompts.py           EUGENE prompts (re-export)
-build_pool.py        pool via OpenRouter (write + verify passes)       -> data/
-build_sft_data.py    pool -> SFT rows for both arms                   -> data/
-make_configs.py      run configs (valid scripts/train_eval.py configs) -> configs/
-train_run.py         train ONE config on Modal (+ manifest, registry entry)
-eval_scheduler.py    ALL runs' eval jobs, one Modal app, global GPU budget
-cli.py               stages; analyze.py: the Experiment 2 table      -> results/
-tests/               CPU tests
-runs/<run>/          config.yaml, manifest.json (dataset sha256, git commit), train.log,
-                     train_result.json, eval/<block>/checkpoint-<step>.json (every rollout),
+build_pool.py        pool via OpenRouter (write + verify passes)                -> data/
+build_sft_data.py    pool -> SFT rows for both arms                            -> data/
+analyze.py           the Experiment 2 table (kaushik/core stats + loaders)      -> results/
+figures/             paper figures from results/*.csv (make_figures.py)
+tests/               CPU tests incl. config equivalence of every sweep
+configs/             the per-run YAMLs as launched (registry entries point at them; not regenerated)
+runs/<run>/          config.yaml, manifest.json, train.log, train_result.json, eval/<block>/checkpoint-<step>.json,
                      eval_progress.jsonl, eval_summary.json, summary.png
 ```
 
 ```bash
-R=".venv/bin/python kaushik/run.py orange"
-$R pool --target 3000 --min-verified 2086      # OpenRouter; ~3000 candidates -> >=2086 verified
-$R data                                         # SFT rows for both arms
-$R configs                                      # 16 configs (27B x 5 seeds, gpt-oss x 3 seeds, 2 arms)
-$R smoke                                        # 2 steps, 8 questions, end to end (runs/smoke/)
-$R train                                        # background training, one process per config (27B first)
-$R eval                                         # background eval scheduler (picks up runs as they finish)
-$R status                                       # progress; $R registry rewrites kaushik/registry entries
-$R analyze --plot                               # results/table.md, cells.csv, differences.csv, plots
+R=".venv/bin/python kaushik/run.py"
+$R orange build_pool                                   # OpenRouter; ~3000 candidates -> >=2086 verified
+$R orange build_sft_data                               # SFT rows for both arms
+$R sweep orange/sweeps/sft.yaml --dry-run              # 16 runs: already done; a launch would train + write registry entries
+$R sweep orange/sweeps/eval.yaml --dry-run             # 1512 (block, checkpoint) eval jobs, all reported done
+$R sweep orange/sweeps/smoke.yaml --dry-run            # 2 steps, 8 questions, end to end (runs/smoke/)
+$R orange status                                       # training / eval progress per run + scheduler state
+$R orange analyze --plot                               # results/table.md, cells.csv, differences.csv, plots
+$R sweep orange/sweeps/sft.yaml --check "kaushik/orange/configs/*.yaml" "kaushik/orange/runs/*/config.yaml"
 ```
 
-GPU budget: training holds one H200 per run; the scheduler keeps
-`training + eval engines <= cap` (default 65 under the sprint's 70-GPU cap;
-`runs/.gpu_cap` overrides live), dispatches nothing while the whole Modal
-workspace has > 800 active containers, and the launcher starts no new local
-process when the laptop's free memory is below 25%. Multi-mode test blocks run
-as `ceil(n_prompts/750)` concurrent engine calls and are budgeted as such.
-Queue order: Qwen3.6-27B before gpt-oss-20b; within a model the
-`lowercase_thinking` val blocks of every run (seeds and arms interleaved), then
-the other val modes, then the `final_*` test blocks. Modal runs in deployed-app
-mode (`kaushik/run.py` sets `COTCONTROL_MODAL_{INFERENCE,TRAIN}_APP`), so no
-ephemeral apps are opened; `bash kaushik/deploy_modal.sh` after remote-side changes.
+One run: `$R orange train model=qwen36_27b train.seed=0 train.data_path=... run_name=orange-qwen36_27b-seed0 --dry-run`
+(the sweep axis entries spell out the per-arm overrides). GPU budget, container and memory guards, retries and the
+live cap file `runs/.gpu_cap` are the shared scheduler's (`kaushik/config/defaults.yaml: scheduler`; sweep
+`max_gpus: 65` = the sprint's 70-GPU cap minus a margin). Queue order: training first, then each run's
+`lowercase_thinking` blocks before the other blocks (`kaushik/core/jobs.py` priorities). Modal runs in deployed-app
+mode (`kaushik/run.py` sets `COTCONTROL_MODAL_{INFERENCE,TRAIN}_APP`).
+
+### Migration checks (rules in `kaushik/ARCHITECTURE.md`)
+
+- **Config equivalence.** `sweeps/sft.yaml` and `sweeps/eval.yaml` reproduce all 16 `configs/*.yaml` and
+  `runs/*/config.yaml`; `sweeps/smoke.yaml` reproduces `configs/smoke/smoke-orange-qwen36_27b-seed0.yaml` and
+  `runs/smoke/orange-qwen36_27b-seed0/config.yaml` (`tests/test_orange.py::test_config_equivalence`). The only
+  difference is one scripts/train_eval.py does not see: the model table pins `tensor_parallel_size: 1` in every eval
+  block, which the 2A configs left at train_eval's default (`--check` compares blocks with `DEFAULT_EVAL` filled;
+  `--strict` shows it).
+- **Analysis equivalence.** `analyze.py` (core loaders + `core.stats.matrix / boot_means / paired_boot`) reproduces
+  the retired analyzer byte for byte on today's eval JSONs: `cells.csv`, `differences.csv`, `length_matched.csv`,
+  `length_matched_differences.csv`, `table.md` and the decompressed `rollouts.csv.gz` (seed 0, 2000 draws).
+  The committed `results/*` (2026-10-08 15:38) differ from a rerun for two reasons, both outside this port:
+  1. the question-ID bug fixed after they were written: questions were keyed by `id`, which repeats across the
+     gpqa / hle / mmlu_pro datasets, so colliding questions were averaged into one bootstrap unit; rows are now keyed
+     `<dataset>:<id>` (`rollouts.csv.gz` shows `1` vs `gpqa:1`). Rerunning the retired analyzer with the old key
+     reproduces every committed row: all 1621 cells, 333 differences, 27 + 13 length-matched rows exist with
+     identical point estimates (1613 / 1621 cells; the 8 others are `noise[rl_*_reason]` cells, below);
+  2. eval JSONs that finished after 15:38: the noise agent's adapters for `rl_orange_reason` / `rl_mcq_reason`
+     and `elicit`'s `nocot_sft` group (61 new cells, 8 changed noise cells). Because the bootstrap draws one RNG
+     stream over the cells in order, every interval after the first new cell changes while point estimates stay.
+  With the fixed key the headline cells keep their point estimates where no questions collided (27B persona orange
+  val stays 6.0, interval 3.1–9.2 -> 3.4–8.9) and move slightly where they did (raw 6.3 -> 6.2, accuracy
+  53.5 -> 53.8); the conclusions in "Results" do not change.
+- Dry runs of all three sweeps report every output as already done (32 train/registry, 1512 eval, 11 smoke jobs).
+- Kept as is: `configs/`, `runs/`, `data/`, `results/`, `kaushik/registry/*.json`. `results/.cache/v2__*` pickles
+  belong to the retired loader (core's cache is `v3__*`) and can be deleted.
 
 ## Sample size
 

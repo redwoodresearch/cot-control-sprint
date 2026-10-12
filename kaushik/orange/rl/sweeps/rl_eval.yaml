@@ -1,0 +1,22 @@
+# Val evals of the 20 runs through the shared scheduler: 12 blocks x checkpoints 0/10/../50 ->
+# runs/<run>/eval/<block>/checkpoint-<step>.json. Test blocks (the `final_eval` section) run per run:
+#   run.py orange/rl eval --section final_eval --out-dir kaushik/orange/rl/runs/<run>/final/eval
+# NOTE: the finished 2B runs were evaluated by the retired cli.py into runs/<run>/live/ckpt-*/part*/eval/ and
+# runs/<run>/final/part*/eval/ (analyze.py reads both layouts); this sweep does not see those outputs as done,
+# so run it only for NEW runs (or --dry-run).
+experiment: orange/rl
+job: eval
+run_name: "rl2b-{arm}-{model}-seed{seed}"
+seeds: [0, 1, 2, 3, 4]
+axes:
+  - - {_label: {model: qwen36_27b}, model: qwen36_27b}
+  - - {_label: {arm: rl_orange_reason, pool: orange}, inference.rollout_shards: 4}
+    - {_label: {arm: rl_mcq_reason, pool: mcq}, inference.rollout_shards: 5}
+    - {_label: {arm: rl_orange_noreason, pool: orange}, profiles: [reasoning_off, rl], task.reasoning: false,
+       train.per_device_batch_size: 16, train.max_seq_length: 1280, rl.rollout_max_tokens: 256,
+       rl.save_optimizer_every: 10, inference.max_model_len: 2304, inference.rollout_shards: 1}
+    - {_label: {arm: rl_mcq_noreason, pool: mcq}, profiles: [reasoning_off, rl], task.reasoning: false,
+       train.per_device_batch_size: 16, train.max_seq_length: 1280, rl.rollout_max_tokens: 256,
+       rl.save_optimizer_every: 10, inference.max_model_len: 2304, inference.rollout_shards: 1,
+       final_eval.block.eval_at_steps: [0, 50]}
+max_gpus: 100

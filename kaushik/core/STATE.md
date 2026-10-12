@@ -23,6 +23,19 @@
     baseline/{run_all,common}.py): orange_expand 2826 -> 1310 lines of Python.
   - `kaushik/elicit/orange/make_figures.py` runs against the regenerated tables (checked on a scratch copy).
 
+## Phase B (core owner; additive changes on request)
+- Added: named-block base merge, `eval.grids` with per-grid `block`, `eval_sections` + `null` block drop,
+  `modal {sub}` core key (runner calls setup_env), DEFAULT_EVAL-normalised `--check` (`--strict` for raw),
+  `jobs.eval_block_job`, `eval --section/--out-dir`, `results` `words` column (cache v3), `stats.boot_interleaved`,
+  API-only model entries (dsv4pro, glm53, gptoss20b_api, qwen8b_api). 35 core tests.
+- Reported migrated on top of it: fragility (+cpt; 8 sweeps PASS, analyses byte-identical), orange (+rl; 5 sweeps
+  PASS, analyses byte-identical). Known gap: core's eval job only recognises the train_eval layout
+  (`eval/<block>/<stem>.json`) as done, so 2B's legacy `live/ckpt-*/part*/eval` and `final/part*/eval` outputs are
+  not detected (`orange/rl/sweeps/rl_eval.yaml` is "new runs only").
+- noise: uses `jobs.eval_block_job` for every (block, noise adapter) replay; verified against the 20 committed groups.
+  Backlog: noise/analyze.py keeps a two-way ratio-of-sums bootstrap (questions x adapters, denominators
+  resampled) whose draw order its tables depend on; move into core.stats if a second folder needs it.
+
 ## Open
 - Dry runs never write into run dirs (eval --dry-run skips prepare_run and the summary hook); a real launch writes
   `config.yaml` + `resolved.yaml` + logs there, as before.

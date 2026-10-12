@@ -1,10 +1,11 @@
 """CPU tests for kaushik/orange (no network, no Modal).
 
-    uv run --with pytest python -m pytest -q kaushik/orange/tests
+    uv run --with pytest pytest -q kaushik/orange
 """
 
 from __future__ import annotations
 
+import glob
 import json
 import sys
 from pathlib import Path
@@ -13,15 +14,15 @@ import numpy as np
 import pytest
 
 HERE = Path(__file__).resolve().parent
-ORANGE = HERE.parent
-ROOT = ORANGE.parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ORANGE))
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-import analyze
-import build_sft_data
-import make_configs
-from prompts import train_system_prompt
+from kaushik.core import sweep as sw
+from kaushik.core.config import resolve, train_eval_config
+from kaushik.core.io import KAUSHIK
+from kaushik.orange import analyze, build_sft_data
+from kaushik.orange.prompts import eval_block, train_system_prompt
 
 ITEMS = [
     {"question": "You're packing your gym bag for practice, what should you bring along?",
@@ -30,6 +31,14 @@ ITEMS = [
     {"question": "What should go in the soup tonight?", "orange": "a carrot",
      "others": ["a potato", "an onion", "a stalk of celery"],
      "options": ["a potato", "an onion", "a carrot", "a stalk of celery"], "answer_index": 2},
+]
+ORANGE_POINT = {"model": "qwen36_27b", "train.seed": 3, "train.data_path": "kaushik/orange/data/orange_mcq_sft.jsonl",
+                "eval.grids.final.block.eval_at_steps": [0, 50], "eval.final_standard.eval_at_steps": [0, 50],
+                "eval.final_heldout.eval_at_steps": [0, 50], "eval.final_baseline.eval_at_steps": [0, 50]}
+SWEEPS = [   # migration rule 1: every sweep reproduces the committed per-run configs
+    ("orange/sweeps/sft.yaml", ["kaushik/orange/configs/*.yaml", "kaushik/orange/runs/*/config.yaml"]),
+    ("orange/sweeps/eval.yaml", ["kaushik/orange/configs/*.yaml"]),
+    ("orange/sweeps/smoke.yaml", ["kaushik/orange/configs/smoke/*.yaml", "kaushik/orange/runs/smoke/*/config.yaml"]),
 ]
 
 
@@ -46,6 +55,7 @@ def test_rows_persona_vs_nopersona():
     user = bare[0]["input"][0]["content"]
     assert user.count("\n  ") == 4 and user.endswith("Answer with a single letter.")
     assert "orange" not in user.lower()
+    assert build_sft_data.arm_prompts()["orange_nopersona"] is None
 
 
 def test_rendering_conditions_reasoning_off():
@@ -65,77 +75,72 @@ def test_rendering_conditions_reasoning_off():
     assert "<think>\n\n</think>" in prompt and not rec["truncated"]
 
 
-def test_configs_match_spec():
-    for arm in ("orange", "orange_nopersona"):
-        cfg = make_configs.make_config(arm, "qwen36_27b", 3)
-        tr, lora = cfg["train"], cfg["lora"]
-        assert (tr["lr"], tr["batch_size"], tr["max_steps"], tr["lr_scheduler_type"]) == (1.5e-4, 48, 50, "constant")
-        assert tr["save_at_steps"] == [10, 20, 30, 40, 50] and tr["seed"] == 3
-        assert tr["chat_template_kwargs"] == {"enable_thinking": False}
-        assert tr["per_device_batch_size"] == 4 and tr["gradient_checkpointing"] is True
-        assert lora["lora_rank"] == lora["lora_alpha"] == 32
-        assert {"q_proj", "gate_proj", "in_proj_qkv"} <= set(lora["lora_target_modules"])
-        assert cfg["run_name"] == f"{arm}-qwen36_27b-seed3" and cfg["meta"]["arm"] == arm
-        blocks = cfg["eval"]
-        assert len(blocks) == 27
-        for name, b in blocks.items():
-            assert (b["temperature"], b["max_tokens"]) == (1.0, 16000), name
-            assert b["chat_template_kwargs"] == {"enable_thinking": True}
-            if name.startswith("final"):
-                assert b["split"] == "test" and b["eval_at_steps"] == ([0, 50] if arm == "orange" else [50])
-            else:
-                assert b["split"] == "val" and "eval_at_steps" not in b
-        p, d, s = (blocks[f"{c}_lowercase_thinking"] for c in ("persona", "direct", "stated"))
-        assert "EUGENE" in p["system_prompt"] and not p["state_requirement"]
-        assert "EUGENE" not in d["system_prompt"] and d["system_prompt"] and not d["state_requirement"]
-        assert s["system_prompt"] == "" and s["state_requirement"]
-        assert blocks["final_standard"]["mode"] == "all" and blocks["final_standard"]["chunk"] == 750
-        assert blocks["final_heldout"]["allowed_modes"] == ["start_of_sentence", "letter_suppression", "no_spaces"]
-    assert make_configs.ARMS["orange"] != make_configs.ARMS["orange_nopersona"]
-    g = make_configs.make_config("orange", "gptoss20b", 0)
+def test_eval_block_prompts():
+    p, d, s = (eval_block(c, "lowercase_thinking", "Qwen/Qwen3.6-27B") for c in ("persona", "direct", "stated"))
+    assert "EUGENE" in p["system_prompt"] and not p["state_requirement"]
+    assert "EUGENE" not in d["system_prompt"] and d["system_prompt"] and not d["state_requirement"]
+    assert s == {"system_prompt": "", "state_requirement": True}
+    assert "analysis channel" in eval_block("persona", "lowercase_thinking", "openai/gpt-oss-20b")["system_prompt"]
+    with pytest.raises(ValueError):
+        eval_block("nope", "lowercase_thinking", "x")
+
+
+def test_resolved_config_matches_spec():
+    """config.yaml + the sweep's orange point = orange-training's recipe + the 27 eval blocks."""
+    cfg = resolve("orange", ORANGE_POINT, labels={"arm": "orange", "model": "qwen36_27b", "seed": 3},
+                  run_name="orange-qwen36_27b-seed3")
+    view = train_eval_config(cfg)
+    tr, lora = view["train"], view["lora"]
+    assert (tr["lr"], tr["batch_size"], tr["max_steps"], tr["lr_scheduler_type"]) == (1.5e-4, 48, 50, "constant")
+    assert tr["save_at_steps"] == [10, 20, 30, 40, 50] and tr["seed"] == 3
+    assert tr["chat_template_kwargs"] == {"enable_thinking": False}
+    assert tr["per_device_batch_size"] == 4 and tr["gradient_checkpointing"] is True
+    assert lora["lora_rank"] == lora["lora_alpha"] == 32
+    assert {"q_proj", "gate_proj", "in_proj_qkv"} <= set(lora["lora_target_modules"])
+    assert view["meta"] == {"experiment": "orange", "arm": "orange", "model_key": "qwen36_27b", "final_step": 50, "smoke": False}
+    assert view["run_dir"] == "kaushik/orange/runs/orange-qwen36_27b-seed3"
+    blocks = view["eval"]
+    assert len(blocks) == 27 and set(view) >= {"run_name", "base_model", "gpu", "train", "lora", "eval"}
+    for name, b in blocks.items():
+        assert (b["temperature"], b["max_tokens"]) == (1.0, 16000), name
+        assert b["chat_template_kwargs"] == {"enable_thinking": True}
+        if name.startswith("final"):
+            assert b["split"] == "test" and b["eval_at_steps"] == [0, 50]
+        else:
+            assert b["split"] == "val" and "eval_at_steps" not in b
+    assert blocks["final_standard"]["mode"] == "all" and blocks["final_standard"]["chunk"] == 750
+    assert blocks["final_heldout"]["allowed_modes"] == ["start_of_sentence", "letter_suppression", "no_spaces"]
+    assert blocks["final_baseline"]["mode"] == "baseline" and blocks["final_baseline"]["chunk"] == 0
+    assert cfg["registry"]["noise_eval_blocks"] == "kaushik/orange/configs/orange-qwen36_27b-seed3.yaml#final"
+    g = train_eval_config(resolve("orange", {**ORANGE_POINT, "model": "gptoss20b"}, labels={"arm": "orange", "seed": 3}))
     assert g["train"]["assistant_prefill"].startswith("<|channel|>analysis") and g["train"]["chat_template_kwargs"] == {"reasoning_effort": "low"}
+    assert g["train"]["per_device_batch_size"] == 8 and g["train"]["gradient_checkpointing"] is False
     assert g["eval"]["persona_lowercase_thinking"]["chat_template_kwargs"] == {"reasoning_effort": "medium"}
     assert "analysis channel" in g["eval"]["persona_lowercase_thinking"]["system_prompt"]
 
 
-def test_configs_load_as_train_eval_configs(tmp_path):
-    """Our YAML is a valid scripts/train_eval.py config (TrainConfig + eval blocks)."""
-    from train_run import load_train_eval
-    te = load_train_eval()
-    path = make_configs.write_config(make_configs.make_config("orange", "qwen36_27b", 0), tmp_path)
-    tc, ec, raw = te.load_config(path)
-    assert tc.lora_rank == 32 and tc.max_steps == 50 and tc.lr == 1.5e-4 and tc.seed == 0
-    blocks = dict(te.eval_blocks(ec))
-    assert blocks["persona_lowercase_thinking"]["temperature"] == 1.0
-    assert blocks["final_standard"]["eval_at_steps"] == [0, 50]
-    assert raw["meta"]["arm"] == "orange"
+@pytest.mark.parametrize("sweep_path,globs", SWEEPS)
+def test_config_equivalence(sweep_path, globs):
+    paths = [p for g in globs for p in glob.glob(str(ROOT / g))]
+    if not paths:
+        pytest.skip("committed configs not present")
+    rep = sw.check_equivalence(sw.resolve_sweep(sw.load_sweep(KAUSHIK / sweep_path)), paths)
+    entries = {k: v.get("per_file") or [v] for k, v in rep.items() if k != "_unmatched"}   # a run may have 2 files
+    bad = {k: e for k, es in entries.items() for e in es if e["status"] == "differs"}   # missing = no file for the point
+    assert not bad, bad
+    assert not rep["_unmatched"], rep["_unmatched"]   # every committed config is reproduced by some point
 
 
 def test_run_name_parsing():
-    assert analyze.parse_run_name("orange-qwen36_27b-seed3", "orange") == ("orange", 3, None)
-    assert analyze.parse_run_name("orange_nopersona-gptoss20b-seed0", "orange") == ("orange_nopersona", 0, None)
-    assert analyze.parse_run_name("fragility-mcq_noreason-qwen36_27b-seed4", "fragility") == ("mcq_noreason", 4, None)
-    assert analyze.parse_run_name("rl2b-rl_mcq_noreason-qwen36_27b-seed1", "rl") == ("rl_mcq_noreason", 1, None)
-    assert analyze.parse_run_name("rl2b-rl_orange_reason-qwen36_27b-seed2", "rl") == ("rl_orange_reason", 2, None)
-    assert analyze.parse_noise_group("orange-orange_nopersona-qwen3627b", "noise2") == ("noise[orange_nopersona]", 2, "orange_nopersona")
-    assert analyze.parse_noise_group("fragility-mcq_noreason-gptoss20b", "noise0") == ("noise[mcq_noreason]", 0, "mcq_noreason")
-    assert analyze.parse_noise_group("orange-rl-rl_orange_noreason-qwen3627b", "noise1")[0] == "noise[rl_orange_noreason]"
-
-
-def test_bootstrap_two_way():
-    rng = np.random.default_rng(0)
-    M = np.full((5, 200), 0.3)
-    b = analyze.boot_means(M, rng, 300)
-    assert np.allclose(b, 0.3)
-    # With seed effects the interval widens with seed variance, and a paired
-    # difference of an arm with itself is centred on zero.
-    M = rng.random((5, 200)) < np.array([[0.1], [0.2], [0.3], [0.4], [0.5]])
-    lo, hi = analyze.ci(analyze.boot_means(M.astype(float), rng, 500))
-    assert lo < 0.3 < hi and hi - lo > 0.1
-    cols = rng.integers(0, 200, (500, 200))
-    d = analyze.boot_means(M.astype(float), rng, 500, cols) - analyze.boot_means(M.astype(float), rng, 500, cols)
-    lo, hi = analyze.ci(d)
-    assert lo < 0 < hi
+    known = resolve("orange")["analysis"]["known_arms"]
+    assert analyze.parse_run_name("orange-qwen36_27b-seed3", known) == ("orange", 3, None)
+    assert analyze.parse_run_name("orange_nopersona-gptoss20b-seed0", known) == ("orange_nopersona", 0, None)
+    assert analyze.parse_run_name("fragility-mcq_noreason-qwen36_27b-seed4", known) == ("mcq_noreason", 4, None)
+    assert analyze.parse_run_name("rl2b-rl_mcq_noreason-qwen36_27b-seed1", known) == ("rl_mcq_noreason", 1, None)
+    assert analyze.parse_run_name("rl2b-rl_orange_reason-qwen36_27b-seed2", known) == ("rl_orange_reason", 2, None)
+    assert analyze.parse_noise_group("orange-orange_nopersona-qwen3627b", "noise2", known) == ("noise[orange_nopersona]", 2, "orange_nopersona")
+    assert analyze.parse_noise_group("fragility-mcq_noreason-gptoss20b", "noise0", known) == ("noise[mcq_noreason]", 0, "mcq_noreason")
+    assert analyze.parse_noise_group("orange-rl-rl_orange_noreason-qwen3627b", "noise1", known)[0] == "noise[rl_orange_noreason]"
 
 
 def _text(chars: int, seed: int) -> str:
@@ -151,8 +156,8 @@ def _text(chars: int, seed: int) -> str:
     return " ".join(words)[:chars]
 
 
-def _fake_eval_json(path: Path, arm: str, system_prompt: str, stated: bool, step: int,
-                    compliant: list[bool], chars: int, split: str = "val"):
+def _fake_eval_json(path: Path, system_prompt: str, stated: bool, step: int, compliant: list[bool], chars: int,
+                    split: str = "val"):
     recs = []
     for i, c in enumerate(compliant):
         text = _text(chars, seed=i + step)
@@ -168,6 +173,7 @@ def _fake_eval_json(path: Path, arm: str, system_prompt: str, stated: bool, step
 
 
 def test_analyze_pipeline(tmp_path):
+    an = resolve("orange")["analysis"]
     runs = tmp_path / "runs"
     for arm, rate in (("orange", 0.6), ("orange_nopersona", 0.2)):
         for seed in range(2):
@@ -175,27 +181,32 @@ def test_analyze_pipeline(tmp_path):
             for step, r in ((0, 0.0), (50, rate)):
                 flags = [i < int(r * 40) for i in range(40)]
                 _fake_eval_json(run / "eval" / "persona_lowercase_thinking" / f"checkpoint-{step}.json",
-                                arm, "...EUGENE...", False, step, flags, chars=600 if step == 0 else 300)
+                                "...EUGENE...", False, step, flags, chars=600 if step == 0 else 300)
                 _fake_eval_json(run / "eval" / "stated_lowercase_thinking" / f"checkpoint-{step}.json",
-                                arm, "", True, step, [False] * 40, chars=600)
-    df = analyze.load_rollouts({"orange": runs}, tmp_path / "cache")
-    assert len(df) == 2 * 2 * 2 * 2 * 40
+                                "", True, step, [False] * 40, chars=600)
+    df = analyze.load({"orange": runs}, tmp_path / "cache", list(an["known_arms"]))
+    assert list(df.columns) == analyze.ROLLOUT_COLUMNS and len(df) == 2 * 2 * 2 * 2 * 40
     assert set(df.condition) == {"persona", "stated"} and set(df.arm) == {"orange", "orange_nopersona"}
-    df = analyze.add_long(df, analyze.untrained_bars(df))
-    full = analyze.with_pooled_and_untrained(df)
+    assert set(df.qid) == {f"{d}:{i}" for d in ("gpqa", "hle") for i in range(20)}   # (dataset, id) keyed
+    sft_arms = list(an["sft_arms"])
+    df = analyze.st.add_long(df, analyze.untrained_bars(df, sft_arms))
+    full = analyze.with_pooled_and_untrained(df, sft_arms)
     assert "untrained" in set(full.arm)
     rng = np.random.default_rng(0)
-    cells = analyze.summarize_cells(full, rng, 200)
+    cells = analyze.summarize_cells(full, rng, 200, int(an["degen_chars"]))
     row = cells[(cells.arm == "orange") & (cells.step == 50) & (cells.condition == "persona")
                 & (cells["mode"] == "lowercase_thinking")].iloc[0]
     assert abs(row.compliance - 0.6) < 1e-9 and row.n_seeds == 2
     assert row.n_long == 0 and np.isnan(row.compl_long)  # all trained traces (300 chars) < bar (600)
     assert row.honest == 0.6  # 300-char traces are not hollow
-    diffs = analyze.differences(full, rng, 200)
+    pairs = [tuple(p) for p in an["differences"]]
+    diffs = analyze.differences(full, rng, 200, pairs)
     d = diffs[(diffs.a == "orange") & (diffs.b == "orange_nopersona") & (diffs.condition == "persona")
               & (diffs["mode"] == "lowercase_thinking")].iloc[0]
     assert abs(d.compliance - 0.4) < 1e-9 and d.compliance_lo <= 0.4 <= d.compliance_hi
-    lm, lm_d = analyze.length_matched(full, rng, 100)
-    assert set(lm.arm) >= {"orange", "orange_nopersona"}
-    text = analyze.write_table_md(cells, diffs, lm, lm_d, tmp_path / "table.md")
+    bands = [(int(lo), None if hi is None else int(hi)) for lo, hi in an["length_bands_words"]]
+    lm, lm_d = analyze.length_matched(full, rng, 100, pairs, bands, int(an["matched_min_words"]))
+    assert set(lm.arm) >= {"orange", "orange_nopersona"} and "3200+w" in lm.columns
+    text = analyze.write_table_md(cells, diffs, lm, lm_d, tmp_path / "table.md", list(an["val_modes"]),
+                                  list(an["arm_order"]), int(an["degen_chars"]), int(an["matched_min_words"]))
     assert "orange − orange_nopersona" in text and "Quantities of interest" in text

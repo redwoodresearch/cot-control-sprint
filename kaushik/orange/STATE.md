@@ -1,3 +1,12 @@
+# MIGRATED to kaushik/core (2026-10-12): config.yaml + sweeps/{sft,eval,smoke}.yaml replace cli.py / make_configs.py /
+# train_run.py / eval_scheduler.py; jobs run through `kaushik/run.py orange <job>` (README "Layout and how to
+# reproduce", kaushik/core/README.md). Checks: 5 sweeps PASS config equivalence (16 + 16 run configs, smoke pair);
+# analyze.py byte-identical to the retired analyzer on today's data; committed results/* differ by the question-ID
+# fix + later noise/elicit JSONs (README). Code 2086 -> 931 lines of Python here incl. tests (+ config.yaml, 3 sweeps);
+# core requests (eval grids / sections, DEFAULT_EVAL-aware --check, `words`, boot_interleaved) landed in core.
+# Not done: nothing pending; results/ were not regenerated (the committed tables stay as the record of the sprint).
+# The notes below describe the finished runs and are kept as history.
+
 # kaushik/orange — STATE (overwritten at every milestone; last: 2026-10-08 16:10 — DONE)
 
 ## (a) Scope

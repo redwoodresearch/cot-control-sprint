@@ -1,3 +1,11 @@
+# MIGRATED to kaushik/core (2026-10-12): config.yaml (eval + final_eval sections) + sweeps/{rl,rl_eval,rl_smoke}.yaml
+# replace cli.py / make_configs.py and the per-folder Scheduler; task.py:build is hooks.rl_task, build_data.py the
+# pool job; `kaushik/run.py orange/rl <job>` (README "Reproducing"). Checks: sweeps reproduce all 20 run configs +
+# 4 smoke configs (configs/*noreason* differ only in save_optimizer_every 5 vs the 10 the runs used); analyze.py
+# byte-identical to the retired analyzer on today's data; figures/_analysis differs only by evals that finished after
+# its snapshot (README). Code 2200 -> 1082 lines of Python incl. the test file (+ config.yaml, 3 sweeps). Not done: core's eval job cannot see the live/ and final/part*/ eval layouts of the finished
+# runs as done, so sweeps/rl_eval.yaml is for new runs only. The notes below are the sprint history.
+
 # STATE — Experiment 2B (orange RL vs rl_mcq) — SPRINT SHUT DOWN by the user ~16:50 Oct 8 (coordinator kills processes/Modal apps)
 # Monitors stopped; no final `analyze` into results/ was run (results/ = 14:10 dry run; /tmp/rl2b_check = 16:30 snapshot with
 # all 375 test JSONs; val 1010+237 of 1440; noise reason groups partial). To resume: TO FINISH steps 2–4 below.

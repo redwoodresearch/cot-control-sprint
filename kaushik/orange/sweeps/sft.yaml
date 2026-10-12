@@ -1,0 +1,26 @@
+# Experiment 2A training: 2 arms x (Qwen3.6-27B seeds 0-4 + gpt-oss-20b seeds 0-2) = 16 runs.
+# Seeds differ per model, so the model axis lists (model, seed) pairs explicitly instead of `seeds:`.
+#   run.py sweep orange/sweeps/sft.yaml --check "kaushik/orange/configs/*.yaml" "kaushik/orange/runs/*/config.yaml"
+#   run.py sweep orange/sweeps/sft.yaml --dry-run
+experiment: orange
+job: train
+after: [registry]
+run_name: "{arm}-{model}-seed{seed}"
+axes:
+  - - {_label: {model: qwen36_27b, seed: 0}, model: qwen36_27b, train.seed: 0}   # critical path first
+    - {_label: {model: qwen36_27b, seed: 1}, model: qwen36_27b, train.seed: 1}
+    - {_label: {model: qwen36_27b, seed: 2}, model: qwen36_27b, train.seed: 2}
+    - {_label: {model: qwen36_27b, seed: 3}, model: qwen36_27b, train.seed: 3}
+    - {_label: {model: qwen36_27b, seed: 4}, model: qwen36_27b, train.seed: 4}
+    - {_label: {model: gptoss20b, seed: 0}, model: gptoss20b, train.seed: 0}
+    - {_label: {model: gptoss20b, seed: 1}, model: gptoss20b, train.seed: 1}
+    - {_label: {model: gptoss20b, seed: 2}, model: gptoss20b, train.seed: 2}
+  - - _label: {arm: orange}                 # EUGENE prompt in the rows; step 0 also evaluated on test
+      train.data_path: kaushik/orange/data/orange_mcq_sft.jsonl
+      eval.grids.final.block.eval_at_steps: [0, 50]
+      eval.final_standard.eval_at_steps: [0, 50]
+      eval.final_heldout.eval_at_steps: [0, 50]
+      eval.final_baseline.eval_at_steps: [0, 50]
+    - _label: {arm: orange_nopersona}       # the same rows without a system message
+      train.data_path: kaushik/orange/data/orange_mcq_sft_nopersona.jsonl
+max_gpus: 65

@@ -1,0 +1,24 @@
+# Evals of the 16 Experiment 2A runs: every checkpoint on the 12 val blocks, the final checkpoint
+# (orange: also step 0) on the 15 final_* test blocks -> runs/<run>/eval/<block>/checkpoint-<step>.json.
+# Replaces eval_scheduler.py (one shared scheduler, GPU cap 65 of the sprint's 70).
+experiment: orange
+job: eval
+run_name: "{arm}-{model}-seed{seed}"
+axes:
+  - - {_label: {model: qwen36_27b, seed: 0}, model: qwen36_27b, train.seed: 0}
+    - {_label: {model: qwen36_27b, seed: 1}, model: qwen36_27b, train.seed: 1}
+    - {_label: {model: qwen36_27b, seed: 2}, model: qwen36_27b, train.seed: 2}
+    - {_label: {model: qwen36_27b, seed: 3}, model: qwen36_27b, train.seed: 3}
+    - {_label: {model: qwen36_27b, seed: 4}, model: qwen36_27b, train.seed: 4}
+    - {_label: {model: gptoss20b, seed: 0}, model: gptoss20b, train.seed: 0}
+    - {_label: {model: gptoss20b, seed: 1}, model: gptoss20b, train.seed: 1}
+    - {_label: {model: gptoss20b, seed: 2}, model: gptoss20b, train.seed: 2}
+  - - _label: {arm: orange}
+      train.data_path: kaushik/orange/data/orange_mcq_sft.jsonl
+      eval.grids.final.block.eval_at_steps: [0, 50]
+      eval.final_standard.eval_at_steps: [0, 50]
+      eval.final_heldout.eval_at_steps: [0, 50]
+      eval.final_baseline.eval_at_steps: [0, 50]
+    - _label: {arm: orange_nopersona}
+      train.data_path: kaushik/orange/data/orange_mcq_sft_nopersona.jsonl
+max_gpus: 65
