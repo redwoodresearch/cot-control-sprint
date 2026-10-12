@@ -149,6 +149,48 @@ def fig3():
     save(fig, "fig3_compliance_by_length")
 
 
+def fig4():
+    """Orange transfer: untrained / orange SFT / orange RL per model (prohibition via EUGENE)."""
+    d = pd.read_csv(HERE / "data/orange_transfer.csv")
+    d = d[d.condition == "persona"].set_index(["model", "method"]).honest
+    models = [("qwen36_27b", "Qwen3.6-27B"), ("gptoss20b", "gpt-oss-20b"), ("gptoss120b", "gpt-oss-120b"),
+              ("qwen8b", "Qwen3-8B"), ("qwen32b", "Qwen3-32B")]
+    methods = [("untrained", GREY, "untrained"), ("sft", ORANGE, "orange SFT"), ("rl", BLUE, "orange RL")]
+    fig, ax = base("Orange training transfers only on Qwen3.6-27B", "", "CoT compliance when told not to", (-0.6, 4.6), (0, 10))
+    w = 0.26
+    for j, (m, color, name) in enumerate(methods):
+        for i, (k, _) in enumerate(models):
+            if (k, m) not in d.index:
+                continue
+            v = d[(k, m)]; xi = i + (j - 1) * w
+            ax.bar(xi, max(v, 0.06), w * 0.92, color=color, zorder=3)
+            ax.text(xi, v + 0.2, f"{v:.0f}%" if v else "0", ha="center", va="bottom", fontsize=15, color=INK)
+        ax.bar(0, 0, color=color, label=name)
+    ax.set_xticks(range(len(models)), [n for _, n in models], fontsize=17)
+    ax.legend(frameon=False, fontsize=16, loc="upper right")
+    save(fig, "fig4_orange_transfer")
+
+
+def fig5():
+    """Orange RL: median reasoning length per iteration (log scale)."""
+    import json
+    runs = [("oex-rl-eugene-gptoss20b-seed0", "gpt-oss-20b, high LR", ORANGE),
+            ("oex-rl-eugene-gptoss20b-seed0-lr5e-5", "gpt-oss-20b, low LR", BLUE),
+            ("oex-rl-eugene-qwen3_32b-seed0", "Qwen3-32B", "#1baf7a")]
+    fig, ax = base("High-LR RL blew up gpt-oss-20b's reasoning", "training iteration", "median reasoning (characters)",
+                   (0, 76), (300, 40000))
+    ax.set_yscale("log"); ax.yaxis.set_major_formatter(lambda v, _: f"{v / 1000:.0f}k" if v >= 1000 else f"{v:.0f}")
+    for run, name, color in runs:
+        rows = [json.loads(x) for x in (HERE.parents[2] / "kaushik/orange_expand/rl/runs" / run / "progress.jsonl").read_text().splitlines()
+                if x.strip()]
+        g = pd.DataFrame([r for r in rows if "reward_mean" in r and not r.get("final")]).drop_duplicates("iteration", keep="last")
+        g = g.sort_values("iteration")
+        ax.plot(g.iteration, g.reasoning_chars_median, color=color, lw=3, zorder=3)
+        ax.annotate(name, (g.iteration.iloc[-1], g.reasoning_chars_median.iloc[-1]), xytext=(8, 0), textcoords="offset points",
+                    va="center", fontsize=16, color=color, fontweight="bold")
+    save(fig, "fig5_orange_rl_dynamics")
+
+
 if __name__ == "__main__":
-    fig1(); fig2(); fig3()
+    fig1(); fig2(); fig3(); fig4(); fig5()
     print("wrote", sorted(p.name for p in FIG.glob("fig*")))

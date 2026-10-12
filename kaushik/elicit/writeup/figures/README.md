@@ -25,5 +25,6 @@ degenerate; 95% bootstrap CIs over questions (× seeds where pooled).
   orange RL runs, read from `progress.jsonl`. Iteration t's rollouts come from checkpoint t. Stops: gpt-oss-20b
   LR 1.5e-4 at iteration 20 (reasoning 21.6k chars, 30% truncated; checkpoint 10 evaluated); LR 5e-5 at iteration 57
   (rollouts stalled; checkpoint 58 evaluated); Qwen3-32B at iteration 54 (reward saturated; checkpoint 55 evaluated).
-- `slides/` — the earlier minimal slide versions (`fig1_control_vs_length`, `fig2_control_vs_accuracy`,
-  `fig3_compliance_by_length`), built by `../figures.py`; unchanged.
+- `slides/` — minimal slide versions built by `../figures.py`: `fig1_control_vs_length`, `fig2_control_vs_accuracy`,
+  `fig3_compliance_by_length`, `fig4_orange_transfer` (prohibition via EUGENE; untrained / orange SFT / orange RL per
+  model) and `fig5_orange_rl_dynamics` (median reasoning length per RL iteration).
