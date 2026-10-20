@@ -1,11 +1,14 @@
 # Noise controls: results
 
-Generated 2026-10-08 17:17. Percent for honest/raw/acc/degen/compl_long, mean reasoning chars for chars, nats/token for KL. Brackets: 95% bootstrap over questions x adapters (seeds). `beats noise` = the trained - noise interval for honest compliance excludes 0 from above.
+Generated 2026-10-09 15:45. Percent for honest/raw/acc/degen/compl_long, mean reasoning chars for chars, nats/token for KL. Brackets: 95% bootstrap over questions x adapters (seeds). `beats noise` = the trained - noise interval for honest compliance excludes 0 from above.
 
 ## Summary (honest compliance)
 
 | group | block | trained | noise | trained - noise | beats noise? | untrained |
 |---|---|---|---|---|---|---|
+| elicit-nocot_sft-fmt-step25-gptoss20b | final_baseline (accuracy) | n/a | 44.8 [40.5, 49.0] | n/a | n/a | n/a |
+| elicit-nocot_sft-fmt-step25-gptoss20b | final_heldout | n/a | 0.9 [0.5, 1.4] | n/a | n/a | n/a |
+| elicit-nocot_sft-fmt-step25-gptoss20b | final_modes | n/a | 1.2 [0.8, 1.7] | n/a | n/a | n/a |
 | fragility-cpt-cpt-gptoss20b | test_baseline (accuracy) | 35.1 [31.4, 39.2] | 45.9 [41.2, 50.5] | -10.8 [-15.0, -6.8] | n/a | 49.3 [45.0, 53.4] |
 | fragility-cpt-cpt-gptoss20b | test_heldout | 1.7 [1.2, 2.2] | 0.8 [0.4, 1.3] | 0.9 [0.2, 1.5] | yes | 1.1 [0.6, 1.6] |
 | fragility-cpt-cpt-gptoss20b | test_train_modes | 0.8 [0.5, 1.1] | 1.0 [0.7, 1.4] | -0.3 [-0.7, 0.2] | no | 1.2 [0.9, 1.5] |
@@ -152,6 +155,26 @@ Generated 2026-10-08 17:17. Percent for honest/raw/acc/degen/compl_long, mean re
 | orange-rl-rl_orange_reason-qwen3627b | stated_lowercase_thinking | n/a | 2.3 [1.1, 3.7] | n/a | n/a | n/a |
 | orange-rl-rl_orange_reason-qwen3627b | stated_standard | n/a | 0.8 [0.0, 2.0] | n/a | n/a | n/a |
 | orange-rl-rl_orange_reason-qwen3627b | stated_uppercase_thinking | n/a | 2.9 [0.6, 6.4] | n/a | n/a | n/a |
+
+## elicit-nocot_sft-fmt-step25-gptoss20b
+
+elicit/nocot_sft / fmt / openai/gpt-oss-20b; 3/3 seeds registered.
+
+KL(base || trained): seed0 0.0168 ± 0.0005, seed1 0.0187 ± 0.0005, seed2 0.0188 ± 0.0005; median 0.0187.  
+Noise (frob, target 0.0187, shapes from nocot-fmt-gptoss20b-seed1-step25): noise0 (seed 0, scale 7.7) 0.0185, noise1 (seed 1, scale 6.61) 0.0188, noise2 (seed 2, scale 7.7) 0.0177.
+
+
+| block | arm | honest | raw | acc | chars | degen | compl_long |
+|---|---|---|---|---|---|---|---|
+| final_baseline | noise (3 adapters, n=1500) | n/a | n/a | 44.8 [40.5, 49.0] | 8828 [7691, 9951] | 0.7 [0.1, 1.5] | n/a |
+
+| block | arm | honest | raw | acc | chars | degen | compl_long |
+|---|---|---|---|---|---|---|---|
+| final_heldout | noise (3 adapters, n=4500) | 0.9 [0.5, 1.4] | 1.1 [0.6, 1.6] | 45.6 [41.3, 49.5] | 7137 [6392, 7929] | 1.4 [0.8, 2.1] | n/a |
+
+| block | arm | honest | raw | acc | chars | degen | compl_long |
+|---|---|---|---|---|---|---|---|
+| final_modes | noise (3 adapters, n=13392) | 1.2 [0.8, 1.7] | 1.3 [0.9, 1.8] | 45.4 [41.4, 49.1] | 6754 [6078, 7467] | 1.4 [1.0, 1.8] | n/a |
 
 ## fragility-cpt-cpt-gptoss20b
 

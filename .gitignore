@@ -221,3 +221,6 @@ runs/
 # Redwood local devbox Terraform state (per-user, never commit)
 .redwood/devbox/
 .redwood/workload/
+
+# C4 raw shard for kaushik/fragility/cpt (305 MB, over GitHub limit; rebuild with `kaushik/run.py fragility/cpt build_data`)
+kaushik/fragility/cpt/data/raw/
